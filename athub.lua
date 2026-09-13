@@ -1,5 +1,5 @@
 -- ==========================================
--- ⚡ AT Hub - Ultimate Master Engine v33.0
+-- ⚡ AT Hub - Ultimate Master Engine v33.2
 -- 🔧 Stable / Optimized Edition
 -- 👨‍💻 Developer: NATTHANON WHAIPILP
 -- ==========================================
@@ -10,11 +10,19 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = workspace
 local Camera = Workspace.CurrentCamera
 local player = Players.LocalPlayer
+if not player then return end
 
 local safeKey = "AT_UltimateHub_v33"
 local isRunning = true
 
 if _G.ATHub_Unload then pcall(_G.ATHub_Unload) end
+
+-- Remove stale GUI from a previous run if the old unload hook is unavailable
+pcall(function()
+    local pg = player:FindFirstChildOfClass("PlayerGui")
+    local stale = pg and pg:FindFirstChild("AT_UltimateHub_v33")
+    if stale then stale:Destroy() end
+end)
 
 local Connections = {}
 local function TrackConnection(conn)
@@ -85,6 +93,8 @@ end
 
 local function IsVisible(targetPart, myChar)
     if not Config.WallCheck then return true end
+    if not Camera or not targetPart then return false end
+    State.RayParams.FilterDescendantsInstances = {myChar or player.Character}
     local origin = Camera.CFrame.Position
     local dir = targetPart.Position - origin
     local result = Workspace:Raycast(origin, dir, State.RayParams)
@@ -94,14 +104,20 @@ end
 local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
 local guiParent = playerGui
 pcall(function()
-    if gethui then guiParent = gethui()
-    elseif game:GetService("CoreGui") then guiParent = game:GetService("CoreGui") end
+    if type(gethui) == "function" then
+        local h = gethui()
+        if h then guiParent = h end
+    end
 end)
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = safeKey
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = guiParent
+local parentOK = pcall(function() ScreenGui.Parent = guiParent end)
+if not parentOK or not ScreenGui.Parent then
+    guiParent = playerGui
+    ScreenGui.Parent = guiParent
+end
 
 local LauncherBtn = Instance.new("TextButton")
 LauncherBtn.Size = UDim2.new(0, 48, 0, 48)
@@ -137,7 +153,7 @@ TopStatus.Size = UDim2.new(1, 0, 0, 20)
 TopStatus.Position = UDim2.new(0, 0, 0, -25)
 TopStatus.BackgroundTransparency = 1
 TopStatus.TextColor3 = Color3.fromRGB(0, 255, 120)
-TopStatus.Text = "● AT ENGINE V33.0 ACTIVE"
+TopStatus.Text = "● AT ENGINE V33.2 ACTIVE"
 TopStatus.Font = Enum.Font.GothamBold
 TopStatus.TextSize = 12
 TopStatus.Parent = MainFrame
@@ -547,7 +563,7 @@ local InfoText = Instance.new("TextLabel")
 InfoText.Size = UDim2.new(0.95, 0, 0, 100)
 InfoText.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 InfoText.TextColor3 = Color3.fromRGB(220, 230, 255)
-InfoText.Text = "🔥 AT Hub - v33.0\n[Stable / Optimized Edition]\n👨‍💻 Dev: NATTHANON WHAIPILP\n✅ Clean Execution & Safe Core"
+InfoText.Text = "🔥 AT Hub - v33.2\n[Stable / Optimized Edition]\n👨‍💻 Dev: NATTHANON WHAIPILP\n✅ Clean Execution & Safe Core"
 InfoText.Font = Enum.Font.GothamBold
 InfoText.TextSize = 11
 InfoText.TextYAlignment = Enum.TextYAlignment.Center
@@ -585,9 +601,10 @@ UnloadBtn.MouseButton1Click:Connect(function()
     _G.ATHub_Unload()
 end)
 
-TrackConnection(task.spawn(function()
+task.spawn(function()
     while isRunning do
-        if Config.TargetMode == "All" or Config.ProximityAuraOn then
+        pcall(function()
+            if Config.TargetMode == "All" or Config.ProximityAuraOn then
             local tempMobs = {}
             local function ScanContainer(container)
                 for _, v in ipairs(container:GetChildren()) do
@@ -600,10 +617,11 @@ TrackConnection(task.spawn(function()
             end
             ScanContainer(Workspace)
             State.CachedMobs = tempMobs
-        end
+            end
+        end)
         task.wait(2.5)
     end
-end))
+end)
 
 TrackConnection(RunService.Stepped:Connect(function()
     if not isRunning then return end
@@ -624,6 +642,9 @@ TrackConnection(RunService.Heartbeat:Connect(function()
     local hum = char:FindFirstChildOfClass("Humanoid")
     local hrp = GetHRP(char)
     if hum then
+        if not Config.SpeedOn and not Config.JumpOn then
+            -- keep original stats intact when movement features are off
+        end
         if Config.SpeedOn then hum.WalkSpeed = Config.SpeedVal end
         if Config.JumpOn then
             if hum.UseJumpPower then hum.JumpPower = Config.JumpVal else hum.JumpHeight = Config.JumpVal end
@@ -634,8 +655,7 @@ TrackConnection(RunService.Heartbeat:Connect(function()
         if IsAlive(tChar) and hrp then
             local tHrp = GetHRP(tChar)
             if tHrp then
-                local distOffset = Config.FollowOffset * CFrame.new(0,0, Config.FollowDistance)
-                local targetCF = tHrp.CFrame * distOffset
+                local targetCF = tHrp.CFrame * Config.FollowOffset * CFrame.new(0, 0, Config.FollowDistance)
                 if Config.TPMode == "Instant" then
                     hrp.CFrame = targetCF
                 else
@@ -654,7 +674,8 @@ end))
 
 TrackConnection(RunService.RenderStepped:Connect(function()
     if not isRunning then return end
-    Camera = Workspace.CurrentCamera
+    Camera = Workspace.CurrentCamera or Camera
+    if not Camera then return end
     local char = player.Character
     if not char then return end
     local hrp = GetHRP(char)
