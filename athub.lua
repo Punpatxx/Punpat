@@ -1,599 +1,728 @@
 -- ==========================================
--- ⚡ AT Hub - Ultimate Developer Hub v27.0 (Advanced Aimbot & Anti-Ban)
+-- ⚡ AT Hub - Ultimate Master Engine v33.0
+-- 🔧 Stable / Optimized Edition
+-- 👨‍💻 Developer: NATTHANON WHAIPILP
 -- ==========================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Lighting = game:GetService("Lighting")
 local Workspace = workspace
 local Camera = Workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
+local player = Players.LocalPlayer
 
-local AntiBanActive = true
-local ActiveConnections = {}
-local function TrackConnection(conn) table.insert(ActiveConnections, conn); return conn end
+local safeKey = "AT_UltimateHub_v33"
+local isRunning = true
 
-local OriginalStats = {WalkSpeed = 16, JumpPower = 50, Gravity = Workspace.Gravity}
-local function BackupOriginalStats(hum)
-    if hum then OriginalStats.WalkSpeed = hum.WalkSpeed; OriginalStats.JumpPower = hum.JumpPower end
+-- ==========================================
+-- 🧹 GLOBAL CLEANUP SYSTEM (ป้องกันการเปิดซ้อน)
+-- ==========================================
+if _G.ATHub_Unload then pcall(_G.ATHub_Unload) end
+
+local Connections = {}
+local function TrackConnection(conn)
+    table.insert(Connections, conn)
+    return conn
 end
 
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+-- ==========================================
+-- ⚙️ CONFIG & STATE MANAGEMENT
+-- ==========================================
+local Config = {
+    AimbotOn = false, AimFOV = 180, LockPower = 90, TargetPart = "Head",
+    TargetMode = "Players", TeamCheck = false, WallCheck = false,
+    SpeedOn = false, SpeedVal = 16,
+    JumpOn = false, JumpVal = 50,
+    FloatOn = false, FloatSpeed = 20,
+    NoClipOn = false,
+    TPMode = "Instant", FlySpeed = 50,
+    FollowTarget = nil, FollowOn = false,
+    FollowOffset = CFrame.new(0, 3, 0), FollowDistance = 0,
+    ProximityAuraOn = false, AuraRange = 15, AuraCooldown = 0.35,
+    SelectedTool = nil, ToolStatus = "NONE",
+    SafetyMode = true
+}
+
+local State = {
+    OriginalSpeed = 16,
+    OriginalJumpPower = 50,
+    OriginalJumpHeight = 7.2,
+    UseJumpPower = true,
+    CachedMobs = {},
+    LastAuraTick = 0,
+    RayParams = RaycastParams.new()
+}
+
+State.RayParams.FilterType = RaycastFilterType.Exclude
+
+local function GetHRP(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+end
+
+local function IsAlive(char)
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function BackupStats(hum)
+    if not hum then return end
+    State.OriginalSpeed = hum.WalkSpeed
+    State.UseJumpPower = hum.UseJumpPower
+    State.OriginalJumpPower = hum.JumpPower
+    State.OriginalJumpHeight = hum.JumpHeight
+    State.RayParams.FilterDescendantsInstances = {player.Character}
+end
+
+local function RestoreStats()
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = State.OriginalSpeed
+        hum.UseJumpPower = State.UseJumpPower
+        if State.UseJumpPower then
+            hum.JumpPower = State.OriginalJumpPower
+        else
+            hum.JumpHeight = State.OriginalJumpHeight
+        end
+    end
+end
+
+local function IsVisible(targetPart, myChar)
+    if not Config.WallCheck then return true end
+    local origin = Camera.CFrame.Position
+    local dir = targetPart.Position - origin
+    local result = Workspace:Raycast(origin, dir, State.RayParams)
+    return result == nil or result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+-- ==========================================
+-- 🎨 UI CREATION
+-- ==========================================
+local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
 local guiParent = playerGui
 pcall(function()
     if gethui then guiParent = gethui()
     elseif game:GetService("CoreGui") then guiParent = game:GetService("CoreGui") end
 end)
 
-local safeKey = "AT_DevHub_v27"
-if guiParent:FindFirstChild(safeKey) then guiParent:FindFirstChild(safeKey):Destroy() end
-
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = safeKey
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = guiParent
 
-local Config = {
-    UIScale = 1.0,
-    CombatEnabled = false, FOVSize = 150, Smoothness = 0.2,
-    TargetPart = "Head", MaxDistance = 500, TeamCheck = true, AliveCheck = true, WallCheck = true,
-    ESPEnabled = false, ESPTeamCheck = true,
-    SpeedEnabled = false, SpeedVal = 16, JumpEnabled = false, JumpVal = 50,
-    GravityEnabled = false, GravityVal = 196.2, NoClipEnabled = false,
-    TPMode = "Instant", FlySpeedTP = 50, FollowTarget = nil, FollowOn = false,
-    FollowOffset = Vector3.new(0,4,0), SavedPositions = {[1]=nil,[2]=nil,[3]=nil},
-    ThemeDark = true, NoFog = false, BoostFPS = false, RemoveEffects = false, AntiBanEnabled = true,
-    ProximityStrikeEnabled = false, ProximityRange = 15, SelectedTool = nil, ToolHasDamage = false,
-    ProximityCooldown = 0.35, LastProximityAttack = 0
-}
-
 local LauncherBtn = Instance.new("TextButton")
-LauncherBtn.Size = UDim2.new(0,52,0,52)
-LauncherBtn.Position = UDim2.new(0.05,0,0.15,0)
-LauncherBtn.BackgroundColor3 = Color3.fromRGB(15,18,25)
-LauncherBtn.TextColor3 = Color3.fromRGB(0,220,255)
+LauncherBtn.Size = UDim2.new(0, 48, 0, 48)
+LauncherBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+LauncherBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+LauncherBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
 LauncherBtn.Text = "AT"
 LauncherBtn.Font = Enum.Font.GothamBold
 LauncherBtn.TextSize = 16
 LauncherBtn.Active = true
 LauncherBtn.Draggable = true
 LauncherBtn.Parent = ScreenGui
-Instance.new("UICorner",LauncherBtn).CornerRadius = UDim.new(0,10)
-local LauncherStroke = Instance.new("UIStroke",LauncherBtn)
-LauncherStroke.Color = Color3.fromRGB(0,180,255); LauncherStroke.Thickness = 1.5
+Instance.new("UICorner", LauncherBtn).CornerRadius = UDim.new(0, 10)
+local launcherStroke = Instance.new("UIStroke", LauncherBtn)
+launcherStroke.Color = Color3.fromRGB(0, 180, 255)
+launcherStroke.Thickness = 1.5
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0,480,0,380)
-MainFrame.Position = UDim2.new(0.5,-240,0.5,-190)
-MainFrame.BackgroundColor3 = Color3.fromRGB(12,14,20)
+MainFrame.Size = UDim2.new(0, 360, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -180, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
 MainFrame.Visible = false
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
-Instance.new("UICorner",MainFrame).CornerRadius = UDim.new(0,10)
-local MainScale = Instance.new("UIScale",MainFrame)
-local MainStroke = Instance.new("UIStroke",MainFrame)
-MainStroke.Color = Color3.fromRGB(35,45,65); MainStroke.Thickness = 1
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local mainStroke = Instance.new("UIStroke", MainFrame)
+mainStroke.Color = Color3.fromRGB(40, 40, 60)
+mainStroke.Thickness = 1
 
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1,0,0,35)
-TopBar.BackgroundColor3 = Color3.fromRGB(18,22,32)
-TopBar.Parent = MainFrame
-Instance.new("UICorner",TopBar).CornerRadius = UDim.new(0,10)
+local TopStatus = Instance.new("TextLabel")
+TopStatus.Size = UDim2.new(1, 0, 0, 20)
+TopStatus.Position = UDim2.new(0, 0, 0, -25)
+TopStatus.BackgroundTransparency = 1
+TopStatus.TextColor3 = Color3.fromRGB(0, 255, 120)
+TopStatus.Text = "● AT ENGINE V33.0 ACTIVE"
+TopStatus.Font = Enum.Font.GothamBold
+TopStatus.TextSize = 12
+TopStatus.Parent = MainFrame
 
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(0,200,1,0); TitleLabel.Position = UDim2.new(0,12,0,0)
-TitleLabel.BackgroundTransparency = 1; TitleLabel.TextColor3 = Color3.fromRGB(220,235,255)
-TitleLabel.Text = "AT HUB V27.0 [PRO]"; TitleLabel.Font = Enum.Font.GothamBold; TitleLabel.TextSize = 13
-TitleLabel.TextXAlignment = Enum.TextXAlignment.Left; TitleLabel.Parent = TopBar
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 95, 1, 0)
+Sidebar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+Sidebar.Parent = MainFrame
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 10)
+local SidebarList = Instance.new("UIListLayout")
+SidebarList.Padding = UDim.new(0, 5)
+SidebarList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SidebarList.Parent = Sidebar
+Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 8)
 
-local StatusIndicator = Instance.new("TextLabel")
-StatusIndicator.Size = UDim2.new(0,160,1,0); StatusIndicator.Position = UDim2.new(0,145,0,0)
-StatusIndicator.BackgroundTransparency = 1; StatusIndicator.TextColor3 = Color3.fromRGB(0,255,120)
-StatusIndicator.Text = "● SECURE ACTIVE"; StatusIndicator.Font = Enum.Font.GothamBold; StatusIndicator.TextSize = 10
-StatusIndicator.TextXAlignment = Enum.TextXAlignment.Left; StatusIndicator.Parent = TopBar
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, -100, 1, -10)
+Container.Position = UDim2.new(0, 100, 0, 5)
+Container.BackgroundTransparency = 1
+Container.Parent = MainFrame
 
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0,35,0,35); CloseBtn.Position = UDim2.new(1,-35,0,0)
-CloseBtn.BackgroundTransparency = 1; CloseBtn.TextColor3 = Color3.fromRGB(200,80,80)
-CloseBtn.Text = "✕"; CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 14; CloseBtn.Parent = TopBar
-
-local Sidebar = Instance.new("ScrollingFrame")
-Sidebar.Size = UDim2.new(0,115,1,-45); Sidebar.Position = UDim2.new(0,5,0,40)
-Sidebar.BackgroundColor3 = Color3.fromRGB(16,20,28); Sidebar.ScrollBarThickness = 2; Sidebar.Parent = MainFrame
-Instance.new("UICorner",Sidebar).CornerRadius = UDim.new(0,8)
-local SidebarLayout = Instance.new("UIListLayout",Sidebar)
-SidebarLayout.Padding = UDim.new(0,4); SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-Instance.new("UIPadding",Sidebar).PaddingTop = UDim.new(0,6)
-
-local ContentContainer = Instance.new("Frame")
-ContentContainer.Size = UDim2.new(1,-130,1,-45); ContentContainer.Position = UDim2.new(0,125,0,40)
-ContentContainer.BackgroundTransparency = 1; ContentContainer.Parent = MainFrame
+LauncherBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
 
 local Pages = {}
 local function CreatePage(name)
     local sf = Instance.new("ScrollingFrame")
-    sf.Size = UDim2.new(1,0,1,0); sf.BackgroundTransparency = 1; sf.ScrollBarThickness = 3
-    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y; sf.Visible = false; sf.Parent = ContentContainer
-    local layout = Instance.new("UIListLayout",sf); layout.Padding = UDim.new(0,6)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; Pages[name] = sf; return sf
+    sf.Size = UDim2.new(1, 0, 1, 0)
+    sf.BackgroundTransparency = 1
+    sf.ScrollBarThickness = 2
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.Visible = false
+    sf.Parent = Container
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Parent = sf
+    Pages[name] = sf
+    return sf
 end
-local function CreateTab(name,displayName)
+
+local function CreateTab(name, text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.92,0,0,32); btn.BackgroundColor3 = Color3.fromRGB(22,28,40)
-    btn.TextColor3 = Color3.fromRGB(190,210,235); btn.Text = displayName
-    btn.Font = Enum.Font.GothamSemibold; btn.TextSize = 11; btn.Parent = Sidebar
-    Instance.new("UICorner",btn).CornerRadius = UDim.new(0,6)
-    btn.MouseButton1Click:Connect(function() for _,p in pairs(Pages) do p.Visible=false end; Pages[name].Visible=true end)
+    btn.Size = UDim2.new(0.9, 0, 0, 30)
+    btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
+    btn.TextColor3 = Color3.fromRGB(220, 230, 255)
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Parent = Sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(function()
+        for _, p in pairs(Pages) do p.Visible = false end
+        Pages[name].Visible = true
+    end)
 end
 
-local pageCombat = CreatePage("Combat")
-local pageAura = CreatePage("Aura")
-local pageESP = CreatePage("ESP")
-local pageMove = CreatePage("Movement")
-local pageTP = CreatePage("Teleport")
-local pageSettings = CreatePage("Settings")
-local pageSafety = CreatePage("Safety")
-local pageInfo = CreatePage("Info")
-CreateTab("Combat","🎯 Combat"); CreateTab("Aura","⚔️ Proximity"); CreateTab("ESP","👁 ESP"); CreateTab("Movement","🏃 Movement")
-CreateTab("Teleport","✈️ Teleport"); CreateTab("Settings","⚙️ Settings"); CreateTab("Safety","🛡 Safety"); CreateTab("Info","ℹ️ Info")
-pageCombat.Visible = true
-
-local function MakeToggle(parent,text,callback)
-    local state=false
-    local btn=Instance.new("TextButton")
-    btn.Size=UDim2.new(0.95,0,0,30); btn.BackgroundColor3=Color3.fromRGB(20,25,36)
-    btn.TextColor3=Color3.fromRGB(220,230,245); btn.Text=text; btn.Font=Enum.Font.GothamSemibold
-    btn.TextSize=11; btn.Parent=parent; Instance.new("UICorner",btn).CornerRadius=UDim.new(0,6)
+local function MakeToggle(parent, text, callback, defaultState)
+    local state = defaultState or false
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.95, 0, 0, 32)
+    btn.BackgroundColor3 = state and Color3.fromRGB(0, 160, 255) or Color3.fromRGB(22, 22, 32)
+    btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    btn.Text = (state and "[ON] " or "[OFF] ") .. text
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 11
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseButton1Click:Connect(function()
-        state=not state; btn.BackgroundColor3=state and Color3.fromRGB(0,150,220) or Color3.fromRGB(20,25,36)
-        pcall(callback,state)
+        state = not state
+        btn.BackgroundColor3 = state and Color3.fromRGB(0, 160, 255) or Color3.fromRGB(22, 22, 32)
+        btn.Text = (state and "[ON] " or "[OFF] ") .. text
+        pcall(callback, state)
     end)
     return btn
 end
 
-local function MakeSlider(parent,text,min,max,default,callback)
-    local frame=Instance.new("Frame"); frame.Size=UDim2.new(0.95,0,0,42)
-    frame.BackgroundColor3=Color3.fromRGB(18,22,32); frame.Parent=parent
-    Instance.new("UICorner",frame).CornerRadius=UDim.new(0,6)
-    local label=Instance.new("TextLabel"); label.Size=UDim2.new(1,-10,0,16); label.Position=UDim2.new(0,6,0,2)
-    label.BackgroundTransparency=1; label.TextColor3=Color3.fromRGB(200,215,235); label.Text=text.." : "..tostring(default)
-    label.Font=Enum.Font.GothamSemibold; label.TextSize=11; label.TextXAlignment=Enum.TextXAlignment.Left; label.Parent=frame
-    local sliderBtn=Instance.new("TextButton"); sliderBtn.Size=UDim2.new(1,-12,0,14); sliderBtn.Position=UDim2.new(0,6,0,22)
-    sliderBtn.BackgroundColor3=Color3.fromRGB(10,12,18); sliderBtn.Text=""; sliderBtn.Parent=frame
-    Instance.new("UICorner",sliderBtn).CornerRadius=UDim.new(1,0)
-    local fill=Instance.new("Frame"); local startPct=math.clamp((default-min)/(max-min),0,1)
-    fill.Size=UDim2.new(startPct,0,1,0); fill.BackgroundColor3=Color3.fromRGB(0,180,255); fill.Parent=sliderBtn
-    Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
-    local isDrag=false
-    sliderBtn.InputBegan:Connect(function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then isDrag=true end end)
-    UserInputService.InputEnded:Connect(function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then isDrag=false end end)
+local function MakeSlider(parent, text, min, max, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.95, 0, 0, 42)
+    frame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+    frame.Parent = parent
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 16)
+    label.Position = UDim2.new(0, 5, 0, 2)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Text = text .. " : " .. tostring(default)
+    label.Font = Enum.Font.GothamSemibold
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    local sliderBtn = Instance.new("TextButton")
+    sliderBtn.Size = UDim2.new(1, -12, 0, 14)
+    sliderBtn.Position = UDim2.new(0, 6, 0, 22)
+    sliderBtn.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    sliderBtn.Text = ""
+    sliderBtn.Parent = frame
+    Instance.new("UICorner", sliderBtn).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame")
+    local startPct = math.clamp((default - min) / (max - min), 0, 1)
+    fill.Size = UDim2.new(startPct, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+    fill.Parent = sliderBtn
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local isDrag = false
+    local function update(input)
+        local pos = math.clamp((input.Position.X - sliderBtn.AbsolutePosition.X) / sliderBtn.AbsoluteSize.X, 0, 1)
+        local val = math.floor(min + ((max - min) * pos))
+        fill.Size = UDim2.new(pos, 0, 1, 0)
+        label.Text = text .. " : " .. tostring(val)
+        pcall(callback, val)
+    end
+    sliderBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDrag = true
+            update(input)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDrag = false end
+    end)
     UserInputService.InputChanged:Connect(function(input)
-        if isDrag and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
-            local pos=math.clamp((input.Position.X-sliderBtn.AbsolutePosition.X)/sliderBtn.AbsoluteSize.X,0,1)
-            local val=math.floor(min+((max-min)*pos)); fill.Size=UDim2.new(pos,0,1,0); label.Text=text.." : "..tostring(val); pcall(callback,val)
+        if isDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
         end
     end)
     return frame
 end
 
-MakeToggle(pageCombat,"🎯 Enable Combat/Aimbot",function(v) Config.CombatEnabled=v end)
-MakeSlider(pageCombat,"FOV Size",50,400,150,function(v) Config.FOVSize=v end)
-MakeSlider(pageCombat,"Aim Smoothness (%)",5,100,20,function(v) Config.Smoothness=v/100 end)
-MakeSlider(pageCombat,"Max Distance",50,2000,500,function(v) Config.MaxDistance=v end)
-MakeToggle(pageCombat,"🛡 Team Check",function(v) Config.TeamCheck=v end)
-MakeToggle(pageCombat,"❤️ Alive Check",function(v) Config.AliveCheck=v end)
-MakeToggle(pageCombat,"🧱 Wall Check (เช็กมองเห็น)",function(v) Config.WallCheck=v end)
+local pageAim = CreatePage("Aim")
+local pageAura = CreatePage("Aura")
+local pageMove = CreatePage("Move")
+local pageTP = CreatePage("TP")
+local pageInfo = CreatePage("Info")
+CreateTab("Aim", "🎯 Aim")
+CreateTab("Aura", "⚔️ Proximity")
+CreateTab("Move", "⚡ Move")
+CreateTab("TP", "✈️ TP")
+CreateTab("Info", "🛡️ Info")
+pageAim.Visible = true
 
-local currentAimLabel=Instance.new("TextLabel")
-currentAimLabel.Size=UDim2.new(0.95,0,0,24); currentAimLabel.BackgroundTransparency=1
-currentAimLabel.TextColor3=Color3.fromRGB(0,220,255); currentAimLabel.Text="📌 Aim Part: Head"
-currentAimLabel.Font=Enum.Font.GothamBold; currentAimLabel.TextSize=11; currentAimLabel.Parent=pageCombat
+MakeToggle(pageAim, "เปิด Aimbot", function(v) Config.AimbotOn = v end)
+MakeToggle(pageAim, "🛡️ Team Check", function(v) Config.TeamCheck = v end)
+MakeToggle(pageAim, "🧱 Wall Check", function(v) Config.WallCheck = v end)
+MakeSlider(pageAim, "ขนาดวง FOV", 50, 500, 180, function(v) Config.AimFOV = v end)
+MakeSlider(pageAim, "ความเนียน (Smooth)", 1, 100, 90, function(v) Config.LockPower = v end)
 
-for _,pName in ipairs({"Head","Torso","HumanoidRootPart","Left Arm","Right Arm","Left Leg","Right Leg"}) do
-    local b=Instance.new("TextButton"); b.Size=UDim2.new(0.95,0,0,24); b.BackgroundColor3=Color3.fromRGB(22,28,40)
-    b.TextColor3=Color3.fromRGB(200,215,235); b.Text="Select: "..pName; b.Font=Enum.Font.Gotham; b.TextSize=10; b.Parent=pageCombat
-    Instance.new("UICorner",b).CornerRadius=UDim.new(0,4)
-    b.MouseButton1Click:Connect(function() Config.TargetPart=pName; currentAimLabel.Text="📌 Aim Part: "..pName end)
-end
+local targetModeBtn = Instance.new("TextButton")
+targetModeBtn.Size = UDim2.new(0.95, 0, 0, 26)
+targetModeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+targetModeBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
+targetModeBtn.Text = "📌 เป้า: ผู้เล่น (Players)"
+targetModeBtn.Font = Enum.Font.GothamBold
+targetModeBtn.TextSize = 10
+targetModeBtn.Parent = pageAim
+Instance.new("UICorner", targetModeBtn).CornerRadius = UDim.new(0, 6)
+targetModeBtn.MouseButton1Click:Connect(function()
+    Config.TargetMode = (Config.TargetMode == "Players") and "All" or "Players"
+    targetModeBtn.Text = Config.TargetMode == "Players" and "📌 เป้า: ผู้เล่น (Players)" or "📌 เป้า: ผู้เล่น + มอนสเตอร์"
+end)
 
-local FOVCircle=Instance.new("Frame")
-FOVCircle.Size=UDim2.new(0,Config.FOVSize,0,Config.FOVSize); FOVCircle.Position=UDim2.new(0.5,0,0.5,0)
-FOVCircle.AnchorPoint=Vector2.new(0.5,0.5); FOVCircle.BackgroundTransparency=1; FOVCircle.Visible=true; FOVCircle.Parent=ScreenGui
-Instance.new("UICorner",FOVCircle).CornerRadius=UDim.new(1,0)
-local FOVStroke=Instance.new("UIStroke",FOVCircle); FOVStroke.Color=Color3.fromRGB(0,180,255); FOVStroke.Thickness=1.5
+local currentAimLabel = Instance.new("TextLabel")
+currentAimLabel.Size = UDim2.new(0.95, 0, 0, 20)
+currentAimLabel.BackgroundTransparency = 1
+currentAimLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+currentAimLabel.Text = "📌 ล็อก: หัว (Head)"
+currentAimLabel.Font = Enum.Font.GothamBold
+currentAimLabel.TextSize = 11
+currentAimLabel.Parent = pageAim
 
-local function IsVisible(targetPart)
-    if not Config.WallCheck then return true end
-    local origin=Camera.CFrame.Position; local params=RaycastParams.new()
-    params.FilterType=RaycastParams.FilterType.Exclude; params.FilterDescendantsInstances={LocalPlayer.Character}
-    local result=Workspace:Raycast(origin,targetPart.Position-origin,params)
-    if result then return result.Instance:IsDescendantOf(targetPart.Parent) end
-    return true
-end
-
-TrackConnection(RunService.RenderStepped:Connect(function()
-    pcall(function()
-        FOVCircle.Size=UDim2.new(0,Config.FOVSize,0,Config.FOVSize); FOVCircle.Visible=Config.CombatEnabled
-        if Config.CombatEnabled then
-            local bestTarget=nil; local shortestDist=Config.FOVSize/2
-            local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-            for _,v in pairs(Players:GetPlayers()) do
-                if v~=LocalPlayer then
-                    if Config.TeamCheck and v.Team==LocalPlayer.Team then continue end
-                    if v.Character and v.Character:FindFirstChild("Humanoid") then
-                        local hum=v.Character.Humanoid
-                        if Config.AliveCheck and hum.Health<=0 then continue end
-                        local part=v.Character:FindFirstChild(Config.TargetPart) or v.Character:FindFirstChild("HumanoidRootPart")
-                        if part and (part.Position-Camera.CFrame.Position).Magnitude<=Config.MaxDistance then
-                            if Config.WallCheck and not IsVisible(part) then continue end
-                            local screenPos,onScreen=Camera:WorldToViewportPoint(part.Position)
-                            if onScreen then
-                                local screenDist=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
-                                if screenDist<shortestDist then shortestDist=screenDist; bestTarget=part end
-                            end
-                        end
-                    end
-                end
-            end
-            if bestTarget then
-                local currentCF=Camera.CFrame
-                Camera.CFrame=currentCF:Lerp(CFrame.new(currentCF.Position,bestTarget.Position),Config.Smoothness)
-            end
-        end
+local parts = {{"Head", "หัว (Head)"}, {"HumanoidRootPart", "กลางตัว (Root)"}, {"Torso", "ลำตัว (Torso)"}}
+for _, p in ipairs(parts) do
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.95, 0, 0, 24)
+    b.BackgroundColor3 = Color3.fromRGB(22, 22, 32)
+    b.TextColor3 = Color3.fromRGB(200, 200, 200)
+    b.Text = "➔ " .. p[2]
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 10
+    b.Parent = pageAim
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+    b.MouseButton1Click:Connect(function()
+        Config.TargetPart = p[1]
+        currentAimLabel.Text = "📌 ล็อก: " .. p[2]
     end)
-end))
-
-
--- ==========================================
--- ⚔️ Proximity Strike - เข้าใกล้แล้วสั่งใช้อาวุธ
--- ==========================================
-local auraStatus = Instance.new("TextLabel")
-auraStatus.Size = UDim2.new(0.95,0,0,28)
-auraStatus.BackgroundTransparency = 1
-auraStatus.TextColor3 = Color3.fromRGB(255,180,0)
-auraStatus.Text = "⚔️ อาวุธ: ยังไม่ได้เลือก"
-auraStatus.Font = Enum.Font.GothamBold
-auraStatus.TextSize = 11
-auraStatus.Parent = pageAura
-
-local auraScan = Instance.new("TextButton")
-auraScan.Size = UDim2.new(0.95,0,0,30)
-auraScan.BackgroundColor3 = Color3.fromRGB(0,110,190)
-auraScan.TextColor3 = Color3.fromRGB(255,255,255)
-auraScan.Text = "☰ สแกน Tool ใน Backpack / Character"
-auraScan.Font = Enum.Font.GothamBold
-auraScan.TextSize = 10
-auraScan.Parent = pageAura
-Instance.new("UICorner",auraScan).CornerRadius = UDim.new(0,6)
-
-local auraToolList = Instance.new("ScrollingFrame")
-auraToolList.Size = UDim2.new(0.95,0,0,120)
-auraToolList.BackgroundTransparency = 1
-auraToolList.ScrollBarThickness = 2
-auraToolList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-auraToolList.Parent = pageAura
-local auraLayout = Instance.new("UIListLayout",auraToolList)
-auraLayout.Padding = UDim.new(0,3)
-
-local function CheckToolDamage(tool)
-    if not tool or not tool:IsA("Tool") then return false end
-    for _,obj in ipairs(tool:GetDescendants()) do
-        if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-            local n = string.lower(obj.Name)
-            if (n:find("damage") or n:find("dmg") or n:find("atk") or n:find("power")) and obj.Value > 0 then
-                return true
-            end
-        elseif obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local n = string.lower(obj.Name)
-            if n:find("hit") or n:find("attack") or n:find("damage") or n:find("slash") then
-                return true
-            end
-        end
-    end
-    -- Tool damage is usually implemented by the game's own server code,
-    -- so absence of a visible Damage value does not prove that it cannot attack.
-    return true
 end
 
-local function RefreshAuraTools()
-    for _,obj in ipairs(auraToolList:GetChildren()) do
-        if obj:IsA("TextButton") then obj:Destroy() end
-    end
+MakeToggle(pageAura, "เปิด Proximity Strike", function(v) Config.ProximityAuraOn = v end)
+MakeSlider(pageAura, "ระยะโจมตี", 5, 50, 15, function(v) Config.AuraRange = v end)
+MakeSlider(pageAura, "ดีเลย์ตี (ms x 10)", 1, 10, 3, function(v) Config.AuraCooldown = v / 10 end)
 
-    local toolsFound = {}
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local char = LocalPlayer.Character
+local selectedToolLabel = Instance.new("TextLabel")
+selectedToolLabel.Size = UDim2.new(0.95, 0, 0, 26)
+selectedToolLabel.BackgroundTransparency = 1
+selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+selectedToolLabel.Text = "❌ อาวุธปัจจุบัน: ยังไม่เลือก"
+selectedToolLabel.Font = Enum.Font.GothamBold
+selectedToolLabel.TextSize = 11
+selectedToolLabel.Parent = pageAura
 
-    if backpack then
-        for _,obj in ipairs(backpack:GetChildren()) do
-            if obj:IsA("Tool") then table.insert(toolsFound,obj) end
+local scanToolBtn = Instance.new("TextButton")
+scanToolBtn.Size = UDim2.new(0.95, 0, 0, 28)
+scanToolBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+scanToolBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+scanToolBtn.Text = "☰ สแกนหาอาวุธ"
+scanToolBtn.Font = Enum.Font.GothamBold
+scanToolBtn.TextSize = 11
+scanToolBtn.Parent = pageAura
+Instance.new("UICorner", scanToolBtn).CornerRadius = UDim.new(0, 6)
+
+local toolListFrame = Instance.new("ScrollingFrame")
+toolListFrame.Size = UDim2.new(0.95, 0, 0, 140)
+toolListFrame.BackgroundTransparency = 1
+toolListFrame.ScrollBarThickness = 2
+toolListFrame.Parent = pageAura
+Instance.new("UIListLayout", toolListFrame).Padding = UDim.new(0, 2)
+
+local toolConnection = nil
+local function EvaluateTool(tool)
+    if not tool or not tool:IsA("Tool") then return "INVALID" end
+    for _, desc in ipairs(tool:GetDescendants()) do
+        if (desc:IsA("NumberValue") or desc:IsA("IntValue")) and (desc.Name:lower():find("damage") or desc.Name:lower():find("dmg")) then
+            return "READY"
         end
     end
-    if char then
-        for _,obj in ipairs(char:GetChildren()) do
-            if obj:IsA("Tool") then table.insert(toolsFound,obj) end
+    for _, desc in ipairs(tool:GetDescendants()) do
+        if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then return "UNKNOWN" end
+    end
+    return "UNKNOWN"
+end
+
+scanToolBtn.MouseButton1Click:Connect(function()
+    for _, c in pairs(toolListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    local foundTools = {}
+    local bp, char = player:FindFirstChild("Backpack"), player.Character
+    local function AddTools(parent)
+        if not parent then return end
+        for _, v in ipairs(parent:GetChildren()) do
+            if v:IsA("Tool") and not table.find(foundTools, v) then table.insert(foundTools, v) end
         end
     end
-
-    if #toolsFound == 0 then
-        auraStatus.Text = "❌ ไม่พบ Tool"
+    AddTools(bp)
+    AddTools(char)
+    if #foundTools == 0 then
+        selectedToolLabel.Text = "❌ ไม่พบ Tool ในตัว"
+        selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
-
-    for _,tool in ipairs(toolsFound) do
-        local hasDamage = CheckToolDamage(tool)
-        local button = Instance.new("TextButton")
-        button.Size = UDim2.new(1,0,0,26)
-        button.BackgroundColor3 = Color3.fromRGB(25,40,30)
-        button.TextColor3 = Color3.fromRGB(0,255,150)
-        button.Text = "⚔️ "..tool.Name
-        button.Font = Enum.Font.GothamSemibold
-        button.TextSize = 10
-        button.Parent = auraToolList
-        Instance.new("UICorner",button).CornerRadius = UDim.new(0,5)
-
-        button.MouseButton1Click:Connect(function()
+    for _, tool in ipairs(foundTools) do
+        local status = EvaluateTool(tool)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 26)
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+        local statusText = status == "READY" and "[DETECTED] " or "[UNKNOWN] "
+        local tColor = status == "READY" and Color3.fromRGB(0, 255, 120) or Color3.fromRGB(255, 200, 0)
+        btn.TextColor3 = tColor
+        btn.Text = "⚔️ " .. statusText .. tool.Name
+        btn.Font = Enum.Font.GothamSemibold
+        btn.TextSize = 10
+        btn.Parent = toolListFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        btn.MouseButton1Click:Connect(function()
+            for _, c in ipairs(toolListFrame:GetChildren()) do if c:IsA("TextButton") then c.BackgroundColor3 = Color3.fromRGB(30, 30, 40) end end
+            btn.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
             Config.SelectedTool = tool
-            Config.ToolHasDamage = hasDamage
-            auraStatus.TextColor3 = Color3.fromRGB(0,255,150)
-            auraStatus.Text = "⚔️ อาวุธ: "..tool.Name.." | พร้อมโจมตี"
+            Config.ToolStatus = status
+            selectedToolLabel.Text = "✔️ เลือกแล้ว: " .. tool.Name
+            selectedToolLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+            if toolConnection then toolConnection:Disconnect() end
+            toolConnection = tool.AncestryChanged:Connect(function(_, newParent)
+                if not newParent or (newParent ~= player.Character and newParent ~= player:FindFirstChild("Backpack")) then
+                    if Config.SelectedTool == tool then
+                        Config.SelectedTool = nil
+                        selectedToolLabel.Text = "❌ อาวุธหลุดหายไปแล้ว"
+                        selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    end
+                    toolConnection:Disconnect()
+                end
+            end)
+            TrackConnection(toolConnection)
         end)
     end
+end)
+
+MakeToggle(pageMove, "เปิดวิ่งเร็ว", function(v)
+    Config.SpeedOn = v
+    if not v then RestoreStats() end
+end)
+MakeSlider(pageMove, "ความเร็ว", 16, 300, 16, function(v) Config.SpeedVal = v end)
+MakeToggle(pageMove, "เปิดกระโดดสูง", function(v)
+    Config.JumpOn = v
+    if not v then RestoreStats() end
+end)
+MakeSlider(pageMove, "พลังกระโดด", 50, 300, 50, function(v) Config.JumpVal = v end)
+MakeToggle(pageMove, "ทะลุกำแพง (NoClip)", function(v) Config.NoClipOn = v end)
+MakeToggle(pageMove, "เปิดลอยตัว (Float)", function(v) Config.FloatOn = v end)
+MakeSlider(pageMove, "ความเร็วลอยขึ้น", 5, 100, 20, function(v) Config.FloatSpeed = v end)
+
+local tpModeBtn = Instance.new("TextButton")
+tpModeBtn.Size = UDim2.new(0.95, 0, 0, 26)
+tpModeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+tpModeBtn.TextColor3 = Color3.fromRGB(0, 220, 255)
+tpModeBtn.Text = "🚀 โหมด: วาร์ปทันที (Instant)"
+tpModeBtn.Font = Enum.Font.GothamBold
+tpModeBtn.TextSize = 10
+tpModeBtn.Parent = pageTP
+Instance.new("UICorner", tpModeBtn).CornerRadius = UDim.new(0, 6)
+tpModeBtn.MouseButton1Click:Connect(function()
+    Config.TPMode = (Config.TPMode == "Instant") and "Smooth" or "Instant"
+    tpModeBtn.Text = Config.TPMode == "Instant" and "🚀 โหมด: วาร์ปทันที" or "🚀 โหมด: บินไปหา (Smooth)"
+end)
+
+MakeSlider(pageTP, "ความเร็วบินตาม", 10, 200, 50, function(v) Config.FlySpeed = v end)
+MakeSlider(pageTP, "ระยะห่างเป้าหมาย", 0, 20, 0, function(v) Config.FollowDistance = v end)
+
+local offsetLabel = Instance.new("TextLabel")
+offsetLabel.Size = UDim2.new(0.95, 0, 0, 20)
+offsetLabel.BackgroundTransparency = 1
+offsetLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+offsetLabel.Text = "📌 ทิศทาง: เหนือหัว (Above)"
+offsetLabel.Font = Enum.Font.GothamBold
+offsetLabel.TextSize = 11
+offsetLabel.Parent = pageTP
+
+local offsets = {
+    {"เหนือหัว", CFrame.new(0, 4, 0)},
+    {"ใต้เท้า", CFrame.new(0, -4, 0)},
+    {"ด้านหน้า", CFrame.new(0, 0, -4)},
+    {"ด้านหลัง", CFrame.new(0, 0, 4)}
+}
+for _, off in ipairs(offsets) do
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.95, 0, 0, 22)
+    b.BackgroundColor3 = Color3.fromRGB(22, 22, 32)
+    b.TextColor3 = Color3.fromRGB(200, 200, 200)
+    b.Text = "➔ " .. off[1]
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 10
+    b.Parent = pageTP
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+    b.MouseButton1Click:Connect(function()
+        Config.FollowOffset = off[2]
+        offsetLabel.Text = "📌 ทิศทาง: " .. off[1]
+    end)
 end
 
-auraScan.MouseButton1Click:Connect(RefreshAuraTools)
+local StopTPBtn = Instance.new("TextButton")
+StopTPBtn.Size = UDim2.new(0.95, 0, 0, 30)
+StopTPBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+StopTPBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopTPBtn.Text = "🛑 ปิดวาร์ปตาม"
+StopTPBtn.Font = Enum.Font.GothamBold
+StopTPBtn.TextSize = 11
+StopTPBtn.Parent = pageTP
+Instance.new("UICorner", StopTPBtn).CornerRadius = UDim.new(0, 6)
+StopTPBtn.MouseButton1Click:Connect(function()
+    Config.FollowOn = false
+    Config.FollowTarget = nil
+    StopTPBtn.Text = "🛑 ปิดวาร์ปตาม"
+end)
 
-MakeToggle(pageAura,"⚔️ Proximity Strike (เข้าใกล้แล้วโจมตี)",function(v)
-    Config.ProximityStrikeEnabled = v
-    if v and not Config.SelectedTool then
-        auraStatus.TextColor3 = Color3.fromRGB(255,180,0)
-        auraStatus.Text = "⚠️ เปิดแล้ว แต่ยังไม่ได้เลือก Tool"
+local RefreshTPBtn = Instance.new("TextButton")
+RefreshTPBtn.Size = UDim2.new(0.95, 0, 0, 26)
+RefreshTPBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+RefreshTPBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshTPBtn.Text = "🔄 โหลดรายชื่อผู้เล่น"
+RefreshTPBtn.Font = Enum.Font.GothamBold
+RefreshTPBtn.TextSize = 11
+RefreshTPBtn.Parent = pageTP
+Instance.new("UICorner", RefreshTPBtn).CornerRadius = UDim.new(0, 6)
+
+local playerListFrame = Instance.new("ScrollingFrame")
+playerListFrame.Size = UDim2.new(0.95, 0, 0, 90)
+playerListFrame.BackgroundTransparency = 1
+playerListFrame.ScrollBarThickness = 2
+playerListFrame.Parent = pageTP
+Instance.new("UIListLayout", playerListFrame).Padding = UDim.new(0, 2)
+
+RefreshTPBtn.MouseButton1Click:Connect(function()
+    for _, c in pairs(playerListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 0, 24)
+            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.Text = "👤 " .. p.DisplayName
+            btn.Font = Enum.Font.GothamSemibold
+            btn.TextSize = 10
+            btn.Parent = playerListFrame
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+            btn.MouseButton1Click:Connect(function()
+                Config.FollowTarget = p
+                Config.FollowOn = true
+                StopTPBtn.Text = "⚡ ตามติด: " .. p.DisplayName
+            end)
+        end
     end
 end)
 
-MakeSlider(pageAura,"ระยะโจมตี (Range)",5,50,15,function(v)
-    Config.ProximityRange = v
+MakeToggle(pageInfo, "Safety Check", function(v) Config.SafetyMode = v end, true)
+
+local InfoText = Instance.new("TextLabel")
+InfoText.Size = UDim2.new(0.95, 0, 0, 100)
+InfoText.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+InfoText.TextColor3 = Color3.fromRGB(220, 230, 255)
+InfoText.Text = "🔥 AT Hub - v33.0\n[Stable / Optimized Edition]\n👨‍💻 Dev: NATTHANON WHAIPILP\n✅ Clean Execution & Safe Core"
+InfoText.Font = Enum.Font.GothamBold
+InfoText.TextSize = 11
+InfoText.TextYAlignment = Enum.TextYAlignment.Center
+InfoText.Parent = pageInfo
+Instance.new("UICorner", InfoText).CornerRadius = UDim.new(0, 6)
+
+local UnloadBtn = Instance.new("TextButton")
+UnloadBtn.Size = UDim2.new(0.95, 0, 0, 36)
+UnloadBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+UnloadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnloadBtn.Text = "🗑️ ปิดระบบและลบสคริปต์ (Unload)"
+UnloadBtn.Font = Enum.Font.GothamBold
+UnloadBtn.TextSize = 12
+UnloadBtn.Parent = pageInfo
+Instance.new("UICorner", UnloadBtn).CornerRadius = UDim.new(0, 6)
+
+_G.ATHub_Unload = function()
+    isRunning = false
+    for _, conn in ipairs(Connections) do
+        if conn.Disconnect then pcall(function() conn:Disconnect() end) end
+    end
+    Connections = {}
+    RestoreStats()
+    local char = player.Character
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+    end
+    if ScreenGui then ScreenGui:Destroy() end
+    _G.ATHub_Unload = nil
+end
+
+UnloadBtn.MouseButton1Click:Connect(function()
+    _G.ATHub_Unload()
 end)
 
-MakeSlider(pageAura,"คูลดาวน์การสั่งตี",1,20,4,function(v)
-    Config.ProximityCooldown = v / 10
-end)
+TrackConnection(task.spawn(function()
+    while isRunning do
+        if Config.TargetMode == "All" or Config.ProximityAuraOn then
+            local tempMobs = {}
+            local function ScanContainer(container)
+                for _, v in ipairs(container:GetChildren()) do
+                    if v:IsA("Model") and v ~= player.Character and IsAlive(v) then
+                        table.insert(tempMobs, v)
+                    elseif v:IsA("Folder") or v:IsA("Model") then
+                        ScanContainer(v)
+                    end
+                end
+            end
+            ScanContainer(Workspace)
+            State.CachedMobs = tempMobs
+        end
+        task.wait(2.5)
+    end
+end))
 
-local function GetNearestTargetInRange(myCharacter,range)
-    local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
+TrackConnection(RunService.Stepped:Connect(function()
+    if not isRunning then return end
+    if Config.NoClipOn then
+        local char = player.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+            end
+        end
+    end
+end))
 
-    local nearest,nearestDistance = nil,range
-    for _,model in ipairs(Workspace:GetDescendants()) do
-        if model:IsA("Model") and model ~= myCharacter then
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
-            if hum and root and hum.Health > 0 then
-                local targetPlayer = Players:GetPlayerFromCharacter(model)
-                if targetPlayer ~= LocalPlayer then
-                    local distance = (myRoot.Position - root.Position).Magnitude
-                    if distance <= nearestDistance then
-                        nearest = model
-                        nearestDistance = distance
+TrackConnection(RunService.Heartbeat:Connect(function()
+    if not isRunning then return end
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = GetHRP(char)
+    if hum then
+        if Config.SpeedOn then hum.WalkSpeed = Config.SpeedVal end
+        if Config.JumpOn then
+            if hum.UseJumpPower then hum.JumpPower = Config.JumpVal else hum.JumpHeight = Config.JumpVal end
+        end
+    end
+    if Config.FollowOn and Config.FollowTarget then
+        local tChar = Config.FollowTarget.Character
+        if IsAlive(tChar) and hrp then
+            local tHrp = GetHRP(tChar)
+            if tHrp then
+                local distOffset = Config.FollowOffset * CFrame.new(0,0, Config.FollowDistance)
+                local targetCF = tHrp.CFrame * distOffset
+                if Config.TPMode == "Instant" then
+                    hrp.CFrame = targetCF
+                else
+                    hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(Config.FlySpeed / 100, 0.05, 0.8))
+                end
+            end
+        else
+            Config.FollowOn = false
+            StopTPBtn.Text = "🛑 เป้าหมายหาย (วาร์ปหยุด)"
+        end
+    end
+    if Config.FloatOn and hrp and not Config.FollowOn then
+        hrp.Velocity = Vector3.new(hrp.Velocity.X, Config.FloatSpeed, hrp.Velocity.Z)
+    end
+end))
+
+TrackConnection(RunService.RenderStepped:Connect(function()
+    if not isRunning then return end
+    Camera = Workspace.CurrentCamera
+    local char = player.Character
+    if not char then return end
+    local hrp = GetHRP(char)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not IsAlive(char) then return end
+
+    if Config.ProximityAuraOn and Config.SelectedTool and Config.SelectedTool.Parent then
+        local targetInRange = false
+        local pool = (Config.TargetMode == "Players") and Players:GetPlayers() or State.CachedMobs
+        for _, v in ipairs(pool) do
+            local tChar = (typeof(v) == "Instance" and v:IsA("Player")) and v.Character or v
+            if tChar and tChar ~= char and IsAlive(tChar) then
+                local p = Players:GetPlayerFromCharacter(tChar)
+                if p and Config.TeamCheck and p.Team == player.Team then continue end
+                local tHrp = GetHRP(tChar)
+                if tHrp and (hrp.Position - tHrp.Position).Magnitude <= Config.AuraRange then
+                    targetInRange = true
+                    break
+                end
+            end
+        end
+        if targetInRange and (tick() - State.LastAuraTick >= Config.AuraCooldown) then
+            State.LastAuraTick = tick()
+            if Config.SelectedTool.Parent ~= char then pcall(function() hum:EquipTool(Config.SelectedTool) end) end
+            pcall(function() Config.SelectedTool:Activate() end)
+        end
+    end
+
+    if Config.AimbotOn then
+        local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        local bestPart, sDist = nil, Config.AimFOV / 2
+        local pool = (Config.TargetMode == "Players") and Players:GetPlayers() or State.CachedMobs
+        for _, v in ipairs(pool) do
+            local tChar = (typeof(v) == "Instance" and v:IsA("Player")) and v.Character or v
+            if tChar and tChar ~= char and IsAlive(tChar) then
+                local p = Players:GetPlayerFromCharacter(tChar)
+                if p and Config.TeamCheck and p.Team == player.Team then continue end
+                local part = tChar:FindFirstChild(Config.TargetPart) or GetHRP(tChar)
+                if part and IsVisible(part, char) then
+                    local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                        if dist < sDist then sDist, bestPart = dist, part end
                     end
                 end
             end
         end
+        if bestPart then
+            local curCF = Camera.CFrame
+            Camera.CFrame = curCF:Lerp(CFrame.new(curCF.Position, bestPart.Position), math.clamp(Config.LockPower / 100, 0.05, 1))
+        end
     end
-    return nearest
-end
-
-TrackConnection(RunService.Heartbeat:Connect(function()
-    pcall(function()
-        if not Config.ProximityStrikeEnabled or not Config.SelectedTool or not Config.ToolHasDamage then return end
-
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not char or not hum then return end
-
-        local target = GetNearestTargetInRange(char,Config.ProximityRange)
-        if not target then return end
-
-        if tick() - Config.LastProximityAttack < Config.ProximityCooldown then return end
-        Config.LastProximityAttack = tick()
-
-        -- Equip through Humanoid instead of moving the Tool's Parent manually.
-        if Config.SelectedTool.Parent ~= char then
-            hum:EquipTool(Config.SelectedTool)
-        end
-
-        -- This triggers the Tool's normal client activation.
-        -- Actual damage is still controlled by the game's server-side weapon logic.
-        pcall(function()
-            Config.SelectedTool:Activate()
-        end)
-    end)
-end)
-
-
-MakeToggle(pageESP,"👁 Enable ESP (Highlight)",function(v) Config.ESPEnabled=v end)
-MakeToggle(pageESP,"🛡 ESP Team Check",function(v) Config.ESPTeamCheck=v end)
-TrackConnection(RunService.RenderStepped:Connect(function()
-    pcall(function()
-        for _,plr in pairs(Players:GetPlayers()) do
-            if plr~=LocalPlayer and plr.Character then
-                local char=plr.Character; local highlight=char:FindFirstChild("AT_ESP_Highlight")
-                local shouldShow=Config.ESPEnabled
-                if shouldShow and Config.ESPTeamCheck and plr.Team==LocalPlayer.Team then shouldShow=false end
-                if shouldShow and not highlight then
-                    highlight=Instance.new("Highlight"); highlight.Name="AT_ESP_Highlight"; highlight.Adornee=char
-                    highlight.FillColor=Color3.fromRGB(0,180,255); highlight.OutlineColor=Color3.fromRGB(255,255,255)
-                    highlight.FillTransparency=0.5; highlight.Parent=char
-                elseif not shouldShow and highlight then highlight:Destroy() end
-            end
-        end
-    end)
 end))
 
-MakeToggle(pageMove,"⚡ WalkSpeed Override",function(v)
-    Config.SpeedEnabled=v
-    local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum and not v then hum.WalkSpeed=OriginalStats.WalkSpeed end
-end)
-MakeSlider(pageMove,"WalkSpeed Value",16,300,16,function(v) Config.SpeedVal=v end)
-MakeToggle(pageMove,"🦘 JumpPower Override",function(v)
-    Config.JumpEnabled=v
-    local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum and not v then hum.UseJumpPower=true; hum.JumpPower=OriginalStats.JumpPower end
-end)
-MakeSlider(pageMove,"JumpPower Value",50,300,50,function(v) Config.JumpVal=v end)
-MakeToggle(pageMove,"🌍 Custom Gravity",function(v) Config.GravityEnabled=v; if not v then Workspace.Gravity=OriginalStats.Gravity end end)
-MakeSlider(pageMove,"Gravity Value",0,300,196,function(v) Config.GravityVal=v end)
-MakeToggle(pageMove,"👻 NoClip",function(v) Config.NoClipEnabled=v end)
-
-TrackConnection(RunService.Stepped:Connect(function()
-    pcall(function()
-        local char=LocalPlayer.Character
-        if char then
-            local hum=char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                if Config.SpeedEnabled then hum.WalkSpeed=Config.SpeedVal end
-                if Config.JumpEnabled then hum.UseJumpPower=true; hum.JumpPower=Config.JumpVal end
-            end
-            if Config.GravityEnabled then Workspace.Gravity=Config.GravityVal end
-            if Config.NoClipEnabled then for _,part in pairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false end end end
-        end
-    end)
+TrackConnection(player.CharacterAdded:Connect(function(newChar)
+    if not isRunning then return end
+    task.wait(0.5)
+    local hum = newChar:WaitForChild("Humanoid", 5)
+    if hum then BackupStats(hum) end
 end))
 
-local tpModeLabel=Instance.new("TextLabel")
-tpModeLabel.Size=UDim2.new(0.95,0,0,24); tpModeLabel.BackgroundTransparency=1; tpModeLabel.TextColor3=Color3.fromRGB(0,220,255)
-tpModeLabel.Text="🚀 TP Mode: Instant"; tpModeLabel.Font=Enum.Font.GothamBold; tpModeLabel.TextSize=11; tpModeLabel.Parent=pageTP
-local tpModeBtn=Instance.new("TextButton")
-tpModeBtn.Size=UDim2.new(0.95,0,0,26); tpModeBtn.BackgroundColor3=Color3.fromRGB(35,45,60); tpModeBtn.TextColor3=Color3.fromRGB(255,255,255)
-tpModeBtn.Text="🔄 Toggle Mode (Instant / Smooth)"; tpModeBtn.Font=Enum.Font.GothamBold; tpModeBtn.TextSize=10; tpModeBtn.Parent=pageTP
-Instance.new("UICorner",tpModeBtn).CornerRadius=UDim.new(0,6)
-tpModeBtn.MouseButton1Click:Connect(function()
-    Config.TPMode=Config.TPMode=="Instant" and "Smooth" or "Instant"
-    tpModeLabel.Text=Config.TPMode=="Instant" and "🚀 TP Mode: Instant" or "🚀 TP Mode: Smooth Fly"
-end)
-MakeSlider(pageTP,"Smooth Fly Speed",10,200,50,function(v) Config.FlySpeedTP=v end)
-
-local offsetLabel=Instance.new("TextLabel")
-offsetLabel.Size=UDim2.new(0.95,0,0,24); offsetLabel.BackgroundTransparency=1; offsetLabel.TextColor3=Color3.fromRGB(255,200,0)
-offsetLabel.Text="📌 Follow Position: Above (เหนือหัว)"; offsetLabel.Font=Enum.Font.GothamBold; offsetLabel.TextSize=11; offsetLabel.Parent=pageTP
-local offsets={{"Above (เหนือหัว)",Vector3.new(0,4,0)},{"Below (ใต้เท้า)",Vector3.new(0,-4,0)},{"Left (ซ้าย)",Vector3.new(-3,0,0)},{"Right (ขวา)",Vector3.new(3,0,0)},{"Behind (ด้านหลัง)",Vector3.new(0,0,4)}}
-for _,offData in ipairs(offsets) do
-    local b=Instance.new("TextButton"); b.Size=UDim2.new(0.95,0,0,24); b.BackgroundColor3=Color3.fromRGB(22,28,40)
-    b.TextColor3=Color3.fromRGB(200,215,235); b.Text="Pos: "..offData[1]; b.Font=Enum.Font.Gotham; b.TextSize=10; b.Parent=pageTP
-    Instance.new("UICorner",b).CornerRadius=UDim.new(0,4)
-    b.MouseButton1Click:Connect(function() Config.FollowOffset=offData[2]; offsetLabel.Text="📌 Follow Position: "..offData[1] end)
-end
-local StopFollowBtn=Instance.new("TextButton")
-StopFollowBtn.Size=UDim2.new(0.95,0,0,28); StopFollowBtn.BackgroundColor3=Color3.fromRGB(180,50,50)
-StopFollowBtn.TextColor3=Color3.fromRGB(255,255,255); StopFollowBtn.Text="🛑 Stop Follow"; StopFollowBtn.Font=Enum.Font.GothamBold
-StopFollowBtn.TextSize=11; StopFollowBtn.Parent=pageTP; Instance.new("UICorner",StopFollowBtn).CornerRadius=UDim.new(0,6)
-StopFollowBtn.MouseButton1Click:Connect(function() Config.FollowOn=false; Config.FollowTarget=nil; StopFollowBtn.Text="🛑 Stop Follow" end)
-
-local RefreshTPBtn=Instance.new("TextButton")
-RefreshTPBtn.Size=UDim2.new(0.95,0,0,28); RefreshTPBtn.BackgroundColor3=Color3.fromRGB(0,110,180)
-RefreshTPBtn.TextColor3=Color3.fromRGB(255,255,255); RefreshTPBtn.Text="🔄 Refresh & Select Target"; RefreshTPBtn.Font=Enum.Font.GothamBold
-RefreshTPBtn.TextSize=11; RefreshTPBtn.Parent=pageTP; Instance.new("UICorner",RefreshTPBtn).CornerRadius=UDim.new(0,6)
-local TPPlayerScroll=Instance.new("ScrollingFrame")
-TPPlayerScroll.Size=UDim2.new(0.95,0,0,130); TPPlayerScroll.BackgroundTransparency=1; TPPlayerScroll.ScrollBarThickness=3; TPPlayerScroll.Parent=pageTP
-local TPListLayout=Instance.new("UIListLayout",TPPlayerScroll); TPListLayout.Padding=UDim.new(0,3)
-RefreshTPBtn.MouseButton1Click:Connect(function()
-    for _,c in pairs(TPPlayerScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-    for _,p in pairs(Players:GetPlayers()) do if p~=LocalPlayer then
-        local pBtn=Instance.new("TextButton"); pBtn.Size=UDim2.new(1,0,0,26); pBtn.BackgroundColor3=Color3.fromRGB(20,25,35)
-        pBtn.TextColor3=Color3.fromRGB(220,230,245); pBtn.Text="👤 Follow: "..p.DisplayName; pBtn.Font=Enum.Font.Gotham; pBtn.TextSize=10; pBtn.Parent=TPPlayerScroll
-        Instance.new("UICorner",pBtn).CornerRadius=UDim.new(0,4)
-        pBtn.MouseButton1Click:Connect(function() Config.FollowTarget=p; Config.FollowOn=true; StopFollowBtn.Text="⚡ Following: "..p.DisplayName end)
-    end end
-end)
-TrackConnection(RunService.RenderStepped:Connect(function()
-    pcall(function()
-        if Config.FollowOn and Config.FollowTarget and Config.FollowTarget.Character then
-            local tHrp=Config.FollowTarget.Character:FindFirstChild("HumanoidRootPart")
-            local myHrp=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if tHrp and myHrp then
-                local targetCF=tHrp.CFrame*CFrame.new(Config.FollowOffset)
-                if Config.TPMode=="Instant" then myHrp.CFrame=targetCF
-                else myHrp.CFrame=myHrp.CFrame:Lerp(targetCF,math.clamp(Config.FlySpeedTP/100,0.05,1)) end
-            end
-        end
-    end)
-end))
-
-MakeToggle(pageSettings,"🛡 Anti-Ban Shield (ป้องกันตรวจจับ)",function(v)
-    Config.AntiBanEnabled=v
-    StatusIndicator.TextColor3=v and Color3.fromRGB(0,255,120) or Color3.fromRGB(255,180,0)
-    StatusIndicator.Text=v and "● SECURE ACTIVE" or "● WARNING: NO BAN SHIELD"
-end)
-MakeToggle(pageSettings,"🌗 Theme (Dark / Light)",function(v)
-    Config.ThemeDark=v
-    if v then
-        MainFrame.BackgroundColor3=Color3.fromRGB(12,14,20); TopBar.BackgroundColor3=Color3.fromRGB(18,22,32); Sidebar.BackgroundColor3=Color3.fromRGB(16,20,28)
-    else
-        MainFrame.BackgroundColor3=Color3.fromRGB(235,238,245); TopBar.BackgroundColor3=Color3.fromRGB(200,205,215); Sidebar.BackgroundColor3=Color3.fromRGB(215,220,230)
-    end
-end)
-MakeSlider(pageSettings,"UI Scale (%)",80,120,100,function(v) Config.UIScale=v/100; MainScale.Scale=Config.UIScale end)
-MakeToggle(pageSettings,"⚡ FPS Boost (Low Render)",function(v)
-    Config.BoostFPS=v
-    for _,obj in pairs(Workspace:GetDescendants()) do if obj:IsA("BasePart") then obj.Material=v and Enum.Material.SmoothPlastic or Enum.Material.Plastic end end
-end)
-MakeToggle(pageSettings,"🌫️ Remove Fog (ลบหมอก)",function(v)
-    Config.NoFog=v; Lighting.FogEnd=v and 999999 or 100000
-    for _,obj in pairs(Lighting:GetChildren()) do if obj:IsA("Atmosphere") then obj.Density=v and 0 or 0.3 end end
-end)
-MakeToggle(pageSettings,"✨ Remove Effects (ลบเอฟเฟค)",function(v)
-    Config.RemoveEffects=v
-    for _,obj in pairs(Lighting:GetChildren()) do if obj:IsA("PostEffect") then obj.Enabled=not v end end
-end)
-
-local removeUILabel=Instance.new("TextLabel")
-removeUILabel.Size=UDim2.new(0.95,0,0,24); removeUILabel.BackgroundTransparency=1; removeUILabel.TextColor3=Color3.fromRGB(255,80,80)
-removeUILabel.Text="⚠️ ลบหน้าจอ UI ทั้งหมดทิ้ง"; removeUILabel.Font=Enum.Font.GothamBold; removeUILabel.TextSize=11; removeUILabel.Parent=pageSettings
-local confirmUIDelete=false
-local deleteUIBtn=Instance.new("TextButton")
-deleteUIBtn.Size=UDim2.new(0.95,0,0,32); deleteUIBtn.BackgroundColor3=Color3.fromRGB(180,40,40); deleteUIBtn.TextColor3=Color3.fromRGB(255,255,255)
-deleteUIBtn.Text="🗑️ ลบหน้าจอ UI ทิ้ง (กดเพื่อยืนยัน)"; deleteUIBtn.Font=Enum.Font.GothamBold; deleteUIBtn.TextSize=11; deleteUIBtn.Parent=pageSettings
-Instance.new("UICorner",deleteUIBtn).CornerRadius=UDim.new(0,6)
-deleteUIBtn.MouseButton1Click:Connect(function()
-    if not confirmUIDelete then
-        confirmUIDelete=true; deleteUIBtn.Text="❗ แน่ใจนะ? กดอีกทีเพื่อลบถาวร"
-        task.delay(3,function() confirmUIDelete=false; deleteUIBtn.Text="🗑️ ลบหน้าจอ UI ทิ้ง (กดเพื่อยืนยัน)" end)
-    else ScreenGui:Destroy() end
-end)
-
-local EmergencyBtn=Instance.new("TextButton")
-EmergencyBtn.Size=UDim2.new(0.95,0,0,45); EmergencyBtn.BackgroundColor3=Color3.fromRGB(220,40,40)
-EmergencyBtn.TextColor3=Color3.fromRGB(255,255,255); EmergencyBtn.Text="🚨 EMERGENCY STOP"; EmergencyBtn.Font=Enum.Font.GothamBold
-EmergencyBtn.TextSize=13; EmergencyBtn.Parent=pageSafety; Instance.new("UICorner",EmergencyBtn).CornerRadius=UDim.new(0,8)
-local function EmergencyStopAll()
-    Config.CombatEnabled=false; Config.ESPEnabled=false; Config.SpeedEnabled=false; Config.JumpEnabled=false
-    Config.GravityEnabled=false; Config.NoClipEnabled=false; Config.FollowOn=false
-    Workspace.Gravity=OriginalStats.Gravity
-    for _,plr in pairs(Players:GetPlayers()) do if plr.Character and plr.Character:FindFirstChild("AT_ESP_Highlight") then plr.Character.AT_ESP_Highlight:Destroy() end end
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        local hum=LocalPlayer.Character.Humanoid; hum.WalkSpeed=OriginalStats.WalkSpeed; hum.JumpPower=OriginalStats.JumpPower
-    end
-    StatusIndicator.TextColor3=Color3.fromRGB(255,60,60); StatusIndicator.Text="● EMERGENCY STOPPED"
-    task.delay(2.5,function() StatusIndicator.TextColor3=Color3.fromRGB(0,255,120); StatusIndicator.Text="● SECURE ACTIVE" end)
-end
-EmergencyBtn.MouseButton1Click:Connect(EmergencyStopAll)
-
-local InfoBox=Instance.new("TextLabel")
-InfoBox.Size=UDim2.new(0.95,0,0,160); InfoBox.BackgroundColor3=Color3.fromRGB(16,20,28)
-InfoBox.TextColor3=Color3.fromRGB(210,225,245)
-InfoBox.Text=" AT Hub V27.0 [PRO Version]\n\n Developer: NATTHANON WHAIPILP\n Status: Stable & Complete\n\n- Advanced Aimbot with Wall Check\n- Anti-Ban Protection Shield\n- Flexible Teleport Follow Offsets\n- Full Settings, FPS Boost & UI Eraser"
-InfoBox.Font=Enum.Font.Gotham; InfoBox.TextSize=11; InfoBox.TextYAlignment=Enum.TextYAlignment.Top; InfoBox.TextXAlignment=Enum.TextXAlignment.Left; InfoBox.Parent=pageInfo
-Instance.new("UICorner",InfoBox).CornerRadius=UDim.new(0,6)
-
-CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible=false end)
-LauncherBtn.MouseButton1Click:Connect(function() MainFrame.Visible=not MainFrame.Visible end)
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    task.wait(0.5); local hum=newChar:WaitForChild("Humanoid",5); if hum then BackupOriginalStats(hum) end
-end)
-if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then BackupOriginalStats(LocalPlayer.Character.Humanoid) end
-
-print("[AT Hub] V27.0 loaded.")
+if player.Character then BackupStats(player.Character:FindFirstChildOfClass("Humanoid")) end
