@@ -48,7 +48,7 @@ local State = {
     CachedMobs = {}, LastAuraTick = 0, RayParams = RaycastParams.new()
 }
 
-State.RayParams.FilterType = RaycastFilterType.Exclude
+State.RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 -- ==========================================
 -- 🛡️ UTILITY FUNCTIONS
