@@ -37,7 +37,7 @@ local Config = {
     TPMode = "Instant", FlySpeed = 50,
     FollowTarget = nil, FollowOn = false,
     FollowOffset = CFrame.new(0, 3, 0), FollowDistance = 0,
-    ProximityAuraOn = false, AuraRange = 25, AuraCooldown = 0.25,
+    ProximityAuraOn = false, AuraRange = 25, AuraCooldown = 0.2,
     SelectedTool = nil, ToolStatus = "NONE",
     SafetyMode = true
 }
@@ -52,7 +52,7 @@ local State = {
     RayParams = RaycastParams.new()
 }
 
-State.RayParams.FilterType = RaycastFilterType.Exclude
+State.RayParams.FilterType = RaycastParams.FilterType.Exclude
 
 -- ==========================================
 -- 🛡️ UTILITY FUNCTIONS
@@ -114,25 +114,10 @@ end
 -- 🎨 UI CREATION
 -- ==========================================
 local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
-local guiParent = playerGui
-pcall(function()
-    if gethui then
-        guiParent = gethui()
-    elseif game:GetService("CoreGui") then
-        guiParent = game:GetService("CoreGui")
-    end
-end)
-
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = safeKey
 ScreenGui.ResetOnSpawn = false
-
-local successParent = pcall(function()
-    ScreenGui.Parent = guiParent
-end)
-if not successParent then
-    ScreenGui.Parent = playerGui
-end
+ScreenGui.Parent = playerGui
 
 local LauncherBtn = Instance.new("TextButton")
 LauncherBtn.Size = UDim2.new(0, 48, 0, 48)
@@ -176,6 +161,7 @@ Sidebar.Size = UDim2.new(0, 95, 1, 0)
 Sidebar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 Sidebar.Parent = MainFrame
 Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 10)
+
 local SidebarList = Instance.new("UIListLayout")
 SidebarList.Padding = UDim.new(0, 5)
 SidebarList.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -193,6 +179,7 @@ LauncherBtn.MouseButton1Click:Connect(function()
 end)
 
 local Pages = {}
+
 local function CreatePage(name)
     local sf = Instance.new("ScrollingFrame")
     sf.Size = UDim2.new(1, 0, 1, 0)
@@ -201,10 +188,12 @@ local function CreatePage(name)
     sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
     sf.Visible = false
     sf.Parent = Container
+
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.Parent = sf
+
     Pages[name] = sf
     return sf
 end
@@ -219,6 +208,7 @@ local function CreateTab(name, text)
     btn.TextSize = 11
     btn.Parent = Sidebar
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
     btn.MouseButton1Click:Connect(function()
         for _, p in pairs(Pages) do p.Visible = false end
         Pages[name].Visible = true
@@ -243,6 +233,7 @@ local function MakeToggle(parent, text, callback, defaultState)
         btn.Text = (state and "[ON] " or "[OFF] ") .. text
         pcall(callback, state)
     end)
+
     return btn
 end
 
@@ -280,8 +271,13 @@ local function MakeSlider(parent, text, min, max, default, callback)
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
     local isDrag = false
+
     local function update(input)
-        local pos = math.clamp((input.Position.X - sliderBtn.AbsolutePosition.X) / sliderBtn.AbsoluteSize.X, 0, 1)
+        local pos = math.clamp(
+            (input.Position.X - sliderBtn.AbsolutePosition.X) / sliderBtn.AbsoluteSize.X,
+            0,
+            1
+        )
         local val = math.floor(min + ((max - min) * pos))
         fill.Size = UDim2.new(pos, 0, 1, 0)
         label.Text = text .. " : " .. tostring(val)
@@ -289,21 +285,29 @@ local function MakeSlider(parent, text, min, max, default, callback)
     end
 
     sliderBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             isDrag = true
             update(input)
         end
     end)
+
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             isDrag = false
         end
     end)
+
     UserInputService.InputChanged:Connect(function(input)
-        if isDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if isDrag and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
             update(input)
         end
     end)
+
     return frame
 end
 
@@ -344,7 +348,9 @@ Instance.new("UICorner", targetModeBtn).CornerRadius = UDim.new(0, 6)
 
 targetModeBtn.MouseButton1Click:Connect(function()
     Config.TargetMode = (Config.TargetMode == "Players") and "All" or "Players"
-    targetModeBtn.Text = Config.TargetMode == "Players" and "📌 เป้า: ผู้เล่น (Players)" or "📌 เป้า: ทุกสิ่งมีชีวิต (All)"
+    targetModeBtn.Text = Config.TargetMode == "Players"
+        and "📌 เป้า: ผู้เล่น (Players)"
+        or "📌 เป้า: ทุกสิ่งมีชีวิต (All)"
 end)
 
 local currentAimLabel = Instance.new("TextLabel")
@@ -356,7 +362,12 @@ currentAimLabel.Font = Enum.Font.GothamBold
 currentAimLabel.TextSize = 11
 currentAimLabel.Parent = pageAim
 
-local parts = {{"Head", "หัว (Head)"}, {"HumanoidRootPart", "กลางตัว (Root)"}, {"Torso", "ลำตัว (Torso)"}}
+local parts = {
+    {"Head", "หัว (Head)"},
+    {"HumanoidRootPart", "กลางตัว (Root)"},
+    {"Torso", "ลำตัว (Torso)"}
+}
+
 for _, p in ipairs(parts) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0.95, 0, 0, 24)
@@ -367,6 +378,7 @@ for _, p in ipairs(parts) do
     b.TextSize = 10
     b.Parent = pageAim
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+
     b.MouseButton1Click:Connect(function()
         Config.TargetPart = p[1]
         currentAimLabel.Text = "📌 ล็อก: " .. p[2]
@@ -378,10 +390,19 @@ end
 -- ==========================================
 MakeToggle(pageAura, "เปิด Proximity Strike (บังคับถืออาวุธ)", function(v)
     Config.ProximityAuraOn = v
-    if not v then Config.SelectedTool = nil end
+    if not v then
+        Config.SelectedTool = nil
+        Config.ToolStatus = "NONE"
+    end
 end)
-MakeSlider(pageAura, "ระยะโจมตี", 5, 100, 25, function(v) Config.AuraRange = v end)
-MakeSlider(pageAura, "ดีเลย์ตี (ms x 10)", 1, 10, 2, function(v) Config.AuraCooldown = v / 10 end)
+
+MakeSlider(pageAura, "ระยะโจมตี", 5, 100, 25, function(v)
+    Config.AuraRange = v
+end)
+
+MakeSlider(pageAura, "ดีเลย์ตี (ms x 10)", 1, 10, 2, function(v)
+    Config.AuraCooldown = v / 10
+end)
 
 local selectedToolLabel = Instance.new("TextLabel")
 selectedToolLabel.Size = UDim2.new(0.95, 0, 0, 26)
@@ -396,7 +417,7 @@ local scanToolBtn = Instance.new("TextButton")
 scanToolBtn.Size = UDim2.new(0.95, 0, 0, 28)
 scanToolBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
 scanToolBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-scanToolBtn.Text = "☰ สแกนหาอาวุธ (เช็คดาเมจ)"
+scanToolBtn.Text = "☰ สแกนหาอาวุธ"
 scanToolBtn.Font = Enum.Font.GothamBold
 scanToolBtn.TextSize = 11
 scanToolBtn.Parent = pageAura
@@ -413,25 +434,40 @@ local toolConnection = nil
 
 local function EvaluateTool(tool)
     if not tool or not tool:IsA("Tool") then return "INVALID" end
+
     local hasDmg = false
+
     pcall(function()
         for _, desc in ipairs(tool:GetDescendants()) do
-            if (desc:IsA("NumberValue") or desc:IsA("IntValue")) and (desc.Name:lower():find("damage") or desc.Name:lower():find("dmg") or desc.Name:lower():find("atk")) then
-                if desc.Value > 0 then hasDmg = true end
+            if (desc:IsA("NumberValue") or desc:IsA("IntValue"))
+                and (
+                    desc.Name:lower():find("damage")
+                    or desc.Name:lower():find("dmg")
+                    or desc.Name:lower():find("atk")
+                ) then
+                if desc.Value > 0 then
+                    hasDmg = true
+                end
             end
+
             if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
                 hasDmg = true
             end
         end
     end)
-    -- ถ้าสแกนไม่เจอชัดเจน ให้ถือว่าพร้อมใช้ไว้ก่อน จะได้ไม่พลาดอาวุธแปลกๆ ในเกม
-    if not hasDmg then hasDmg = true end
+
+    if not hasDmg then
+        hasDmg = true
+    end
+
     return hasDmg and "READY" or "UNKNOWN"
 end
 
 scanToolBtn.MouseButton1Click:Connect(function()
     for _, c in pairs(toolListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
+        if c:IsA("TextButton") then
+            c:Destroy()
+        end
     end
 
     local foundTools = {}
@@ -439,13 +475,21 @@ scanToolBtn.MouseButton1Click:Connect(function()
 
     local function AddTools(parent)
         if not parent then return end
+
         for _, v in ipairs(parent:GetChildren()) do
             if v:IsA("Tool") then
                 local exists = false
+
                 for _, t in ipairs(foundTools) do
-                    if t == v then exists = true break end
+                    if t == v then
+                        exists = true
+                        break
+                    end
                 end
-                if not exists then table.insert(foundTools, v) end
+
+                if not exists then
+                    table.insert(foundTools, v)
+                end
             end
         end
     end
@@ -461,10 +505,10 @@ scanToolBtn.MouseButton1Click:Connect(function()
 
     for _, tool in ipairs(foundTools) do
         local status = EvaluateTool(tool)
+
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, 0, 0, 26)
         btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-
         btn.TextColor3 = Color3.fromRGB(0, 255, 120)
         btn.Text = "⚔️ [พร้อมใช้งาน] " .. tool.Name
         btn.Font = Enum.Font.GothamSemibold
@@ -481,35 +525,51 @@ scanToolBtn.MouseButton1Click:Connect(function()
             end
 
             for _, c in ipairs(toolListFrame:GetChildren()) do
-                if c:IsA("TextButton") then c.BackgroundColor3 = Color3.fromRGB(30, 30, 40) end
+                if c:IsA("TextButton") then
+                    c.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+                end
             end
-            btn.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
 
+            btn.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
             Config.SelectedTool = tool
             Config.ToolStatus = status
+
             selectedToolLabel.Text = "✔️ ล็อกถืออาวุธ: " .. tool.Name
             selectedToolLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
 
             pcall(function()
-                local char = player.Character
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum and tool.Parent ~= char then
+                local currentChar = player.Character
+                local hum = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
+                if hum and tool.Parent ~= currentChar then
                     hum:EquipTool(tool)
                 end
             end)
 
-            if toolConnection then toolConnection:Disconnect() end
+            if toolConnection then
+                toolConnection:Disconnect()
+            end
+
             pcall(function()
                 toolConnection = tool.AncestryChanged:Connect(function(_, newParent)
-                    if not newParent or (newParent ~= player.Character and newParent ~= player:FindFirstChild("Backpack")) then
+                    if not newParent
+                        or (
+                            newParent ~= player.Character
+                            and newParent ~= player:FindFirstChild("Backpack")
+                        ) then
+
                         if Config.SelectedTool == tool then
                             Config.SelectedTool = nil
+                            Config.ToolStatus = "NONE"
                             selectedToolLabel.Text = "❌ อาวุธหลุดหายไปแล้ว"
                             selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
                         end
-                        if toolConnection then toolConnection:Disconnect() end
+
+                        if toolConnection then
+                            toolConnection:Disconnect()
+                        end
                     end
                 end)
+
                 TrackConnection(toolConnection)
             end)
         end)
@@ -523,17 +583,31 @@ MakeToggle(pageMove, "เปิดวิ่งเร็ว", function(v)
     Config.SpeedOn = v
     if not v then RestoreStats() end
 end)
-MakeSlider(pageMove, "ความเร็ว", 16, 300, 16, function(v) Config.SpeedVal = v end)
+
+MakeSlider(pageMove, "ความเร็ว", 16, 300, 16, function(v)
+    Config.SpeedVal = v
+end)
 
 MakeToggle(pageMove, "เปิดกระโดดสูง", function(v)
     Config.JumpOn = v
     if not v then RestoreStats() end
 end)
-MakeSlider(pageMove, "พลังกระโดด", 50, 300, 50, function(v) Config.JumpVal = v end)
 
-MakeToggle(pageMove, "ทะลุกำแพง (NoClip)", function(v) Config.NoClipOn = v end)
-MakeToggle(pageMove, "เปิดลอยตัว (Float)", function(v) Config.FloatOn = v end)
-MakeSlider(pageMove, "ความเร็วลอยขึ้น", 5, 100, 20, function(v) Config.FloatSpeed = v end)
+MakeSlider(pageMove, "พลังกระโดด", 50, 300, 50, function(v)
+    Config.JumpVal = v
+end)
+
+MakeToggle(pageMove, "ทะลุกำแพง (NoClip)", function(v)
+    Config.NoClipOn = v
+end)
+
+MakeToggle(pageMove, "เปิดลอยตัว (Float)", function(v)
+    Config.FloatOn = v
+end)
+
+MakeSlider(pageMove, "ความเร็วลอยขึ้น", 5, 100, 20, function(v)
+    Config.FloatSpeed = v
+end)
 
 -- ==========================================
 -- ✈️ TELEPORT SYSTEM
@@ -550,11 +624,18 @@ Instance.new("UICorner", tpModeBtn).CornerRadius = UDim.new(0, 6)
 
 tpModeBtn.MouseButton1Click:Connect(function()
     Config.TPMode = (Config.TPMode == "Instant") and "Smooth" or "Instant"
-    tpModeBtn.Text = Config.TPMode == "Instant" and "🚀 โหมด: วาร์ปทันที" or "🚀 โหมด: บินไปหา (Smooth)"
+    tpModeBtn.Text = Config.TPMode == "Instant"
+        and "🚀 โหมด: วาร์ปทันที"
+        or "🚀 โหมด: บินไปหา (Smooth)"
 end)
 
-MakeSlider(pageTP, "ความเร็วบินตาม", 10, 200, 50, function(v) Config.FlySpeed = v end)
-MakeSlider(pageTP, "ระยะห่างเป้าหมาย", 0, 20, 0, function(v) Config.FollowDistance = v end)
+MakeSlider(pageTP, "ความเร็วบินตาม", 10, 200, 50, function(v)
+    Config.FlySpeed = v
+end)
+
+MakeSlider(pageTP, "ระยะห่างเป้าหมาย", 0, 20, 0, function(v)
+    Config.FollowDistance = v
+end)
 
 local offsetLabel = Instance.new("TextLabel")
 offsetLabel.Size = UDim2.new(0.95, 0, 0, 20)
@@ -582,6 +663,7 @@ for _, off in ipairs(offsets) do
     b.TextSize = 10
     b.Parent = pageTP
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+
     b.MouseButton1Click:Connect(function()
         Config.FollowOffset = off[2]
         offsetLabel.Text = "📌 ทิศทาง: " .. off[1]
@@ -623,8 +705,11 @@ Instance.new("UIListLayout", playerListFrame).Padding = UDim.new(0, 2)
 
 RefreshTPBtn.MouseButton1Click:Connect(function()
     for _, c in pairs(playerListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
+        if c:IsA("TextButton") then
+            c:Destroy()
+        end
     end
+
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
             local btn = Instance.new("TextButton")
@@ -636,6 +721,7 @@ RefreshTPBtn.MouseButton1Click:Connect(function()
             btn.TextSize = 10
             btn.Parent = playerListFrame
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
             btn.MouseButton1Click:Connect(function()
                 Config.FollowTarget = p
                 Config.FollowOn = true
@@ -648,7 +734,9 @@ end)
 -- ==========================================
 -- 🛡️ INFO & UNLOAD SYSTEM
 -- ==========================================
-MakeToggle(pageInfo, "Safety Check", function(v) Config.SafetyMode = v end, true)
+MakeToggle(pageInfo, "Safety Check", function(v)
+    Config.SafetyMode = v
+end, true)
 
 local InfoText = Instance.new("TextLabel")
 InfoText.Size = UDim2.new(0.95, 0, 0, 100)
@@ -673,20 +761,29 @@ Instance.new("UICorner", UnloadBtn).CornerRadius = UDim.new(0, 6)
 
 _G.ATHub_Unload = function()
     isRunning = false
+
     for _, conn in ipairs(Connections) do
-        if conn and conn.Disconnect then pcall(function() conn:Disconnect() end) end
+        if conn and conn.Disconnect then
+            pcall(function() conn:Disconnect() end)
+        end
     end
+
     Connections = {}
     RestoreStats()
 
     local char = player.Character
     if char then
         for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
         end
     end
 
-    if ScreenGui then ScreenGui:Destroy() end
+    if ScreenGui then
+        ScreenGui:Destroy()
+    end
+
     _G.ATHub_Unload = nil
 end
 
@@ -695,19 +792,20 @@ UnloadBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- ⚙️ CORE LOGIC LOOPS (Safe & Optimized)
+-- ⚙️ CORE LOGIC LOOPS
 -- ==========================================
 
--- 1. Universal Target Cache
 TrackConnection(task.spawn(function()
     while isRunning do
         pcall(function()
             local tempTargets = {}
+
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= player and p.Character and IsAlive(p.Character) then
                     table.insert(tempTargets, p.Character)
                 end
             end
+
             local function ScanContainer(container)
                 for _, v in ipairs(container:GetChildren()) do
                     if v:IsA("Model") and v ~= player.Character and IsAlive(v) then
@@ -719,16 +817,18 @@ TrackConnection(task.spawn(function()
                     end
                 end
             end
+
             ScanContainer(Workspace)
             State.CachedTargets = tempTargets
         end)
+
         task.wait(1.5)
     end
 end))
 
--- 2. Stepped Logic (NoClip)
 TrackConnection(RunService.Stepped:Connect(function()
     if not isRunning then return end
+
     pcall(function()
         if Config.NoClipOn then
             local char = player.Character
@@ -743,9 +843,9 @@ TrackConnection(RunService.Stepped:Connect(function()
     end)
 end))
 
--- 3. Heartbeat Logic (Movement, Physics & Safe Force-Equip Lock)
 TrackConnection(RunService.Heartbeat:Connect(function()
     if not isRunning then return end
+
     pcall(function()
         local char = player.Character
         if not char then return end
@@ -754,38 +854,53 @@ TrackConnection(RunService.Heartbeat:Connect(function()
         local hrp = GetHRP(char)
 
         if hum then
-            if Config.SpeedOn then hum.WalkSpeed = Config.SpeedVal end
+            if Config.SpeedOn then
+                hum.WalkSpeed = Config.SpeedVal
+            end
+
             if Config.JumpOn then
-                if hum.UseJumpPower then hum.JumpPower = Config.JumpVal else hum.JumpHeight = Config.JumpVal end
+                if hum.UseJumpPower then
+                    hum.JumpPower = Config.JumpVal
+                else
+                    hum.JumpHeight = Config.JumpVal
+                end
             end
         end
 
-        -- [FORCE-EQUIP LOCK SYSTEM] บังคับถืออาวุธไว้ตลอดเวลา ไม่ยอมให้หลุดมือ
         if Config.ProximityAuraOn and Config.SelectedTool then
             local tool = Config.SelectedTool
             local isValidTool = false
+
             pcall(function()
-                if tool and tool.Parent then isValidTool = true end
+                if tool and tool.Parent then
+                    isValidTool = true
+                end
             end)
 
             if isValidTool then
                 if tool.Parent ~= char then
                     local backpack = player:FindFirstChild("Backpack")
+
                     if backpack and tool.Parent == backpack then
-                        if hum then pcall(function() hum:EquipTool(tool) end) end
+                        if hum then
+                            pcall(function() hum:EquipTool(tool) end)
+                        end
                     elseif tool.Parent ~= char then
                         pcall(function() tool.Parent = char end)
                     end
                 end
             else
                 Config.SelectedTool = nil
+                Config.ToolStatus = "NONE"
             end
         end
 
         if Config.FollowOn and Config.FollowTarget then
             local tChar = Config.FollowTarget.Character
+
             if IsAlive(tChar) and hrp then
                 local tHrp = GetHRP(tChar)
+
                 if tHrp then
                     local distOffset = Config.FollowOffset * CFrame.new(0, 0, Config.FollowDistance)
                     local targetCF = tHrp.CFrame * distOffset
@@ -793,7 +908,10 @@ TrackConnection(RunService.Heartbeat:Connect(function()
                     if Config.TPMode == "Instant" then
                         hrp.CFrame = targetCF
                     else
-                        hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(Config.FlySpeed / 100, 0.05, 0.8))
+                        hrp.CFrame = hrp.CFrame:Lerp(
+                            targetCF,
+                            math.clamp(Config.FlySpeed / 100, 0.05, 0.8)
+                        )
                     end
                 end
             else
@@ -802,39 +920,52 @@ TrackConnection(RunService.Heartbeat:Connect(function()
         end
 
         if Config.FloatOn and hrp and not Config.FollowOn then
-            hrp.Velocity = Vector3.new(hrp.Velocity.X, Config.FloatSpeed, hrp.Velocity.Z)
+            hrp.Velocity = Vector3.new(
+                hrp.Velocity.X,
+                Config.FloatSpeed,
+                hrp.Velocity.Z
+            )
         end
     end)
 end))
 
--- 4. RenderStepped Logic (Universal Aura Strike & Fixed Aimbot)
 TrackConnection(RunService.RenderStepped:Connect(function()
     if not isRunning then return end
+
     pcall(function()
         local cam = GetCamera()
         if not cam then return end
 
         local char = player.Character
         if not char then return end
+
         local hrp = GetHRP(char)
-        local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not IsAlive(char) then return end
 
-        -- A. Universal Proximity Aura (ตีได้ไกลและโดนทุกอย่าง)
-        if Config.ProximityAuraOn and Config.SelectedTool and Config.ToolStatus == "READY" then
+        -- A. Proximity Aura
+        if Config.ProximityAuraOn
+            and Config.SelectedTool
+            and Config.ToolStatus == "READY" then
+
             local tool = Config.SelectedTool
             local isEquipped = false
+
             pcall(function()
-                if tool and tool.Parent == char then isEquipped = true end
+                if tool and tool.Parent == char then
+                    isEquipped = true
+                end
             end)
 
             if isEquipped then
                 local targetInRange = false
+
                 for _, tChar in ipairs(State.CachedTargets) do
                     if tChar and tChar ~= char and IsAlive(tChar) then
                         local tHrp = GetHRP(tChar)
+
                         if tHrp then
                             local dist = (hrp.Position - tHrp.Position).Magnitude
+
                             if dist <= Config.AuraRange then
                                 targetInRange = true
                                 break
@@ -843,25 +974,40 @@ TrackConnection(RunService.RenderStepped:Connect(function()
                     end
                 end
 
-                if targetInRange and (tick() - State.LastAuraTick >= Config.AuraCooldown) then
+                if targetInRange
+                    and (tick() - State.LastAuraTick >= Config.AuraCooldown) then
+
                     State.LastAuraTick = tick()
-                    pcall(function() tool:Activate() end)
+
+                    pcall(function()
+                        tool:Activate()
+                    end)
                 end
             end
         end
 
-        -- B. Fixed Aimbot (ล็อกเป้าแม่นยำ รองรับทั้งผู้เล่นและมอนสเตอร์)
+        -- B. Aimbot
         if Config.AimbotOn then
-            local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-            local bestPart, sDist = nil, Config.AimFOV / 2
+            local center = Vector2.new(
+                cam.ViewportSize.X / 2,
+                cam.ViewportSize.Y / 2
+            )
+
+            local bestPart
+            local sDist = Config.AimFOV / 2
 
             for _, tChar in ipairs(State.CachedTargets) do
                 if tChar and tChar ~= char and IsAlive(tChar) then
                     local part = tChar:FindFirstChild(Config.TargetPart) or GetHRP(tChar)
+
                     if part and IsVisible(part, char) then
                         local pos, onScreen = cam:WorldToViewportPoint(part.Position)
+
                         if onScreen then
-                            local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                            local dist = (
+                                Vector2.new(pos.X, pos.Y) - center
+                            ).Magnitude
+
                             if dist < sDist then
                                 sDist = dist
                                 bestPart = part
@@ -874,7 +1020,11 @@ TrackConnection(RunService.RenderStepped:Connect(function()
             if bestPart then
                 local curCF = cam.CFrame
                 local tCF = CFrame.new(curCF.Position, bestPart.Position)
-                cam.CFrame = curCF:Lerp(tCF, math.clamp(Config.LockPower / 100, 0.05, 1))
+
+                cam.CFrame = curCF:Lerp(
+                    tCF,
+                    math.clamp(Config.LockPower / 100, 0.05, 1)
+                )
             end
         end
     end)
@@ -885,17 +1035,22 @@ end))
 -- ==========================================
 TrackConnection(player.CharacterAdded:Connect(function(newChar)
     if not isRunning then return end
+
     task.wait(0.5)
+
     pcall(function()
         local hum = newChar:WaitForChild("Humanoid", 5)
-        if hum then BackupStats(hum) end
+        if hum then
+            BackupStats(hum)
+        end
     end)
 end))
 
--- Initial Backup Check
 pcall(function()
     if player.Character then
         local hum = player.Character:FindFirstChildOfClass("Humanoid")
-        if hum then BackupStats(hum) end
+        if hum then
+            BackupStats(hum)
+        end
     end
 end)
