@@ -1,6 +1,6 @@
 -- ==========================================
--- ⚡ AT Hub - Ultimate Master Engine v33.3
--- 🔧 Force-Equip Lock & Universal Aura Edition
+-- ⚡ AT Hub - Ultimate Master Engine v33.4
+-- 🔧 Bug-Free & Force-Equip Edition
 -- 👨‍💻 Developer: NATTHANON WHAIPILP
 -- ==========================================
 
@@ -146,9 +146,8 @@ LauncherBtn.Active = true
 LauncherBtn.Draggable = true
 LauncherBtn.Parent = ScreenGui
 Instance.new("UICorner", LauncherBtn).CornerRadius = UDim.new(0, 10)
-local launcherStroke = Instance.new("UIStroke", LauncherBtn)
-launcherStroke.Color = Color3.fromRGB(0, 180, 255)
-launcherStroke.Thickness = 1.5
+Instance.new("UIStroke", LauncherBtn).Color = Color3.fromRGB(0, 180, 255)
+Instance.new("UIStroke", LauncherBtn).Thickness = 1.5
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 360, 0, 400)
@@ -159,16 +158,15 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
-local mainStroke = Instance.new("UIStroke", MainFrame)
-mainStroke.Color = Color3.fromRGB(40, 40, 60)
-mainStroke.Thickness = 1
+Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(40, 40, 60)
+Instance.new("UIStroke", MainFrame).Thickness = 1
 
 local TopStatus = Instance.new("TextLabel")
 TopStatus.Size = UDim2.new(1, 0, 0, 20)
 TopStatus.Position = UDim2.new(0, 0, 0, -25)
 TopStatus.BackgroundTransparency = 1
 TopStatus.TextColor3 = Color3.fromRGB(0, 255, 120)
-TopStatus.Text = "● AT ENGINE V33.3 ACTIVE"
+TopStatus.Text = "● AT ENGINE V33.4 ACTIVE"
 TopStatus.Font = Enum.Font.GothamBold
 TopStatus.TextSize = 12
 TopStatus.Parent = MainFrame
@@ -292,14 +290,11 @@ local function MakeSlider(parent, text, min, max, default, callback)
 
     sliderBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDrag = true
-            update(input)
+            isDrag = true; update(input)
         end
     end)
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDrag = false
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDrag = false end
     end)
     UserInputService.InputChanged:Connect(function(input)
         if isDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
@@ -415,21 +410,22 @@ local toolConnection = nil
 
 local function EvaluateTool(tool)
     if not tool or not tool:IsA("Tool") then return "INVALID" end
-    for _, desc in ipairs(tool:GetDescendants()) do
-        if (desc:IsA("NumberValue") or desc:IsA("IntValue")) and (desc.Name:lower():find("damage") or desc.Name:lower():find("dmg") or desc.Name:lower():find("atk")) then
-            if desc.Value > 0 then return "READY" end
+    local hasDmg = false
+    pcall(function()
+        for _, desc in ipairs(tool:GetDescendants()) do
+            if (desc:IsA("NumberValue") or desc:IsA("IntValue")) and (desc.Name:lower():find("damage") or desc.Name:lower():find("dmg") or desc.Name:lower():find("atk")) then
+                if desc.Value > 0 then hasDmg = true end
+            end
+            if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
+                hasDmg = true
+            end
         end
-    end
-    for _, desc in ipairs(tool:GetDescendants()) do
-        if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then return "READY" end
-    end
-    return "UNKNOWN"
+    end)
+    return hasDmg and "READY" or "UNKNOWN"
 end
 
 scanToolBtn.MouseButton1Click:Connect(function()
-    for _, c in pairs(toolListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
+    for _, c in pairs(toolListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
 
     local foundTools = {}
     local bp, char = player:FindFirstChild("Backpack"), player.Character
@@ -439,9 +435,7 @@ scanToolBtn.MouseButton1Click:Connect(function()
         for _, v in ipairs(parent:GetChildren()) do
             if v:IsA("Tool") then
                 local exists = false
-                for _, t in ipairs(foundTools) do
-                    if t == v then exists = true break end
-                end
+                for _, t in ipairs(foundTools) do if t == v then exists = true break end end
                 if not exists then table.insert(foundTools, v) end
             end
         end
@@ -480,9 +474,7 @@ scanToolBtn.MouseButton1Click:Connect(function()
                 return
             end
 
-            for _, c in ipairs(toolListFrame:GetChildren()) do
-                if c:IsA("TextButton") then c.BackgroundColor3 = Color3.fromRGB(30, 30, 40) end
-            end
+            for _, c in ipairs(toolListFrame:GetChildren()) do if c:IsA("TextButton") then c.BackgroundColor3 = Color3.fromRGB(30, 30, 40) end end
             btn.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
 
             Config.SelectedTool = tool
@@ -490,24 +482,28 @@ scanToolBtn.MouseButton1Click:Connect(function()
             selectedToolLabel.Text = "✔️ ล็อกถืออาวุธ: " .. tool.Name
             selectedToolLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
 
-            local char = player.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum and tool.Parent ~= char then
-                pcall(function() hum:EquipTool(tool) end)
-            end
-
-            if toolConnection then toolConnection:Disconnect() end
-            toolConnection = tool.AncestryChanged:Connect(function(_, newParent)
-                if not newParent or (newParent ~= player.Character and newParent ~= player:FindFirstChild("Backpack")) then
-                    if Config.SelectedTool == tool then
-                        Config.SelectedTool = nil
-                        selectedToolLabel.Text = "❌ อาวุธหลุดหายไปแล้ว"
-                        selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-                    end
-                    if toolConnection then toolConnection:Disconnect() end
+            pcall(function()
+                local char = player.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum and tool.Parent ~= char then
+                    hum:EquipTool(tool)
                 end
             end)
-            TrackConnection(toolConnection)
+
+            if toolConnection then toolConnection:Disconnect() end
+            pcall(function()
+                toolConnection = tool.AncestryChanged:Connect(function(_, newParent)
+                    if not newParent or (newParent ~= player.Character and newParent ~= player:FindFirstChild("Backpack")) then
+                        if Config.SelectedTool == tool then
+                            Config.SelectedTool = nil
+                            selectedToolLabel.Text = "❌ อาวุธหลุดหายไปแล้ว"
+                            selectedToolLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                        end
+                        if toolConnection then toolConnection:Disconnect() end
+                    end
+                end)
+                TrackConnection(toolConnection)
+            end)
         end)
     end
 end)
@@ -618,9 +614,7 @@ playerListFrame.Parent = pageTP
 Instance.new("UIListLayout", playerListFrame).Padding = UDim.new(0, 2)
 
 RefreshTPBtn.MouseButton1Click:Connect(function()
-    for _, c in pairs(playerListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
+    for _, c in pairs(playerListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
             local btn = Instance.new("TextButton")
@@ -650,7 +644,7 @@ local InfoText = Instance.new("TextLabel")
 InfoText.Size = UDim2.new(0.95, 0, 0, 100)
 InfoText.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 InfoText.TextColor3 = Color3.fromRGB(220, 230, 255)
-InfoText.Text = "🔥 AT Hub - v33.3\n[Force-Equip & Universal Aura]\n👨‍💻 Dev: NATTHANON WHAIPILP\n✅ Smart Damage & Lock Weapon"
+InfoText.Text = "🔥 AT Hub - v33.4\n[Bug-Free & Force-Equip]\n👨‍💻 Dev: NATTHANON WHAIPILP\n✅ Safe Core & Stable Aura"
 InfoText.Font = Enum.Font.GothamBold
 InfoText.TextSize = 11
 InfoText.TextYAlignment = Enum.TextYAlignment.Center
@@ -691,20 +685,19 @@ UnloadBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- ⚙️ CORE LOGIC LOOPS (Optimized & Universal)
+-- ⚙️ CORE LOGIC LOOPS (Safe & Optimized)
 -- ==========================================
 
+-- 1. Universal Target Cache
 TrackConnection(task.spawn(function()
     while isRunning do
         pcall(function()
             local tempTargets = {}
-
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= player and p.Character and IsAlive(p.Character) then
                     table.insert(tempTargets, p.Character)
                 end
             end
-
             local function ScanContainer(container)
                 for _, v in ipairs(container:GetChildren()) do
                     if v:IsA("Model") and v ~= player.Character and IsAlive(v) then
@@ -716,7 +709,6 @@ TrackConnection(task.spawn(function()
                     end
                 end
             end
-
             ScanContainer(Workspace)
             State.CachedTargets = tempTargets
         end)
@@ -724,6 +716,7 @@ TrackConnection(task.spawn(function()
     end
 end))
 
+-- 2. Stepped Logic (NoClip)
 TrackConnection(RunService.Stepped:Connect(function()
     if not isRunning then return end
     pcall(function()
@@ -740,6 +733,7 @@ TrackConnection(RunService.Stepped:Connect(function()
     end)
 end))
 
+-- 3. Heartbeat Logic (Movement, Physics & Safe Force-Equip Lock)
 TrackConnection(RunService.Heartbeat:Connect(function()
     if not isRunning then return end
     pcall(function()
@@ -756,14 +750,25 @@ TrackConnection(RunService.Heartbeat:Connect(function()
             end
         end
 
-        if Config.ProximityAuraOn and Config.SelectedTool and Config.SelectedTool.Parent then
-            if Config.SelectedTool.Parent ~= char then
-                local backpack = player:FindFirstChild("Backpack")
-                if backpack and Config.SelectedTool.Parent == backpack then
-                    if hum then pcall(function() hum:EquipTool(Config.SelectedTool) end) end
-                elseif Config.SelectedTool.Parent ~= char then
-                    Config.SelectedTool.Parent = char
+        -- [SAFE FORCE-EQUIP LOCK SYSTEM] เช็คความปลอดภัยก่อนดึงอาวุธ
+        if Config.ProximityAuraOn and Config.SelectedTool then
+            local tool = Config.SelectedTool
+            local isValidTool = false
+            pcall(function()
+                if tool and tool.Parent then isValidTool = true end
+            end)
+
+            if isValidTool then
+                if tool.Parent ~= char then
+                    local backpack = player:FindFirstChild("Backpack")
+                    if backpack and tool.Parent == backpack then
+                        if hum then pcall(function() hum:EquipTool(tool) end) end
+                    elseif tool.Parent ~= char then
+                        pcall(function() tool.Parent = char end)
+                    end
                 end
+            else
+                Config.SelectedTool = nil
             end
         end
 
@@ -792,6 +797,7 @@ TrackConnection(RunService.Heartbeat:Connect(function()
     end)
 end))
 
+-- 4. RenderStepped Logic (Universal Aura Strike & Aimbot)
 TrackConnection(RunService.RenderStepped:Connect(function()
     if not isRunning then return end
     pcall(function()
@@ -804,30 +810,37 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not IsAlive(char) then return end
 
-        if Config.ProximityAuraOn and Config.SelectedTool and Config.SelectedTool.Parent == char and Config.ToolStatus == "READY" then
-            local targetInRange = false
+        -- A. Universal Proximity Aura
+        if Config.ProximityAuraOn and Config.SelectedTool and Config.ToolStatus == "READY" then
+            local tool = Config.SelectedTool
+            local isEquipped = false
+            pcall(function()
+                if tool and tool.Parent == char then isEquipped = true end
+            end)
 
-            for _, tChar in ipairs(State.CachedTargets) do
-                if tChar and tChar ~= char and IsAlive(tChar) then
-                    local tHrp = GetHRP(tChar)
-                    if tHrp then
-                        local dist = (hrp.Position - tHrp.Position).Magnitude
-                        if dist <= Config.AuraRange then
-                            targetInRange = true
-                            break
+            if isEquipped then
+                local targetInRange = false
+                for _, tChar in ipairs(State.CachedTargets) do
+                    if tChar and tChar ~= char and IsAlive(tChar) then
+                        local tHrp = GetHRP(tChar)
+                        if tHrp then
+                            local dist = (hrp.Position - tHrp.Position).Magnitude
+                            if dist <= Config.AuraRange then
+                                targetInRange = true
+                                break
+                            end
                         end
                     end
                 end
-            end
 
-            if targetInRange and (tick() - State.LastAuraTick >= Config.AuraCooldown) then
-                State.LastAuraTick = tick()
-                pcall(function()
-                    Config.SelectedTool:Activate()
-                end)
+                if targetInRange and (tick() - State.LastAuraTick >= Config.AuraCooldown) then
+                    State.LastAuraTick = tick()
+                    pcall(function() tool:Activate() end)
+                end
             end
         end
 
+        -- B. Aimbot
         if Config.AimbotOn then
             local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
             local bestPart, sDist = nil, Config.AimFOV / 2
@@ -869,6 +882,7 @@ TrackConnection(player.CharacterAdded:Connect(function(newChar)
     end)
 end))
 
+-- Initial Backup Check
 pcall(function()
     if player.Character then
         local hum = player.Character:FindFirstChildOfClass("Humanoid")
