@@ -43,7 +43,9 @@ local Config = {
     GravityEnabled = false, GravityVal = 196.2, NoClipEnabled = false,
     TPMode = "Instant", FlySpeedTP = 50, FollowTarget = nil, FollowOn = false,
     FollowOffset = Vector3.new(0,4,0), SavedPositions = {[1]=nil,[2]=nil,[3]=nil},
-    ThemeDark = true, NoFog = false, BoostFPS = false, RemoveEffects = false, AntiBanEnabled = true
+    ThemeDark = true, NoFog = false, BoostFPS = false, RemoveEffects = false, AntiBanEnabled = true,
+    ProximityStrikeEnabled = false, ProximityRange = 15, SelectedTool = nil, ToolHasDamage = false,
+    ProximityCooldown = 0.35, LastProximityAttack = 0
 }
 
 local LauncherBtn = Instance.new("TextButton")
@@ -127,13 +129,14 @@ local function CreateTab(name,displayName)
 end
 
 local pageCombat = CreatePage("Combat")
+local pageAura = CreatePage("Aura")
 local pageESP = CreatePage("ESP")
 local pageMove = CreatePage("Movement")
 local pageTP = CreatePage("Teleport")
 local pageSettings = CreatePage("Settings")
 local pageSafety = CreatePage("Safety")
 local pageInfo = CreatePage("Info")
-CreateTab("Combat","🎯 Combat"); CreateTab("ESP","👁 ESP"); CreateTab("Movement","🏃 Movement")
+CreateTab("Combat","🎯 Combat"); CreateTab("Aura","⚔️ Proximity"); CreateTab("ESP","👁 ESP"); CreateTab("Movement","🏃 Movement")
 CreateTab("Teleport","✈️ Teleport"); CreateTab("Settings","⚙️ Settings"); CreateTab("Safety","🛡 Safety"); CreateTab("Info","ℹ️ Info")
 pageCombat.Visible = true
 
@@ -241,6 +244,174 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         end
     end)
 end))
+
+
+-- ==========================================
+-- ⚔️ Proximity Strike - เข้าใกล้แล้วสั่งใช้อาวุธ
+-- ==========================================
+local auraStatus = Instance.new("TextLabel")
+auraStatus.Size = UDim2.new(0.95,0,0,28)
+auraStatus.BackgroundTransparency = 1
+auraStatus.TextColor3 = Color3.fromRGB(255,180,0)
+auraStatus.Text = "⚔️ อาวุธ: ยังไม่ได้เลือก"
+auraStatus.Font = Enum.Font.GothamBold
+auraStatus.TextSize = 11
+auraStatus.Parent = pageAura
+
+local auraScan = Instance.new("TextButton")
+auraScan.Size = UDim2.new(0.95,0,0,30)
+auraScan.BackgroundColor3 = Color3.fromRGB(0,110,190)
+auraScan.TextColor3 = Color3.fromRGB(255,255,255)
+auraScan.Text = "☰ สแกน Tool ใน Backpack / Character"
+auraScan.Font = Enum.Font.GothamBold
+auraScan.TextSize = 10
+auraScan.Parent = pageAura
+Instance.new("UICorner",auraScan).CornerRadius = UDim.new(0,6)
+
+local auraToolList = Instance.new("ScrollingFrame")
+auraToolList.Size = UDim2.new(0.95,0,0,120)
+auraToolList.BackgroundTransparency = 1
+auraToolList.ScrollBarThickness = 2
+auraToolList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+auraToolList.Parent = pageAura
+local auraLayout = Instance.new("UIListLayout",auraToolList)
+auraLayout.Padding = UDim.new(0,3)
+
+local function CheckToolDamage(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    for _,obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+            local n = string.lower(obj.Name)
+            if (n:find("damage") or n:find("dmg") or n:find("atk") or n:find("power")) and obj.Value > 0 then
+                return true
+            end
+        elseif obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local n = string.lower(obj.Name)
+            if n:find("hit") or n:find("attack") or n:find("damage") or n:find("slash") then
+                return true
+            end
+        end
+    end
+    -- Tool damage is usually implemented by the game's own server code,
+    -- so absence of a visible Damage value does not prove that it cannot attack.
+    return true
+end
+
+local function RefreshAuraTools()
+    for _,obj in ipairs(auraToolList:GetChildren()) do
+        if obj:IsA("TextButton") then obj:Destroy() end
+    end
+
+    local toolsFound = {}
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+
+    if backpack then
+        for _,obj in ipairs(backpack:GetChildren()) do
+            if obj:IsA("Tool") then table.insert(toolsFound,obj) end
+        end
+    end
+    if char then
+        for _,obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Tool") then table.insert(toolsFound,obj) end
+        end
+    end
+
+    if #toolsFound == 0 then
+        auraStatus.Text = "❌ ไม่พบ Tool"
+        return
+    end
+
+    for _,tool in ipairs(toolsFound) do
+        local hasDamage = CheckToolDamage(tool)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1,0,0,26)
+        button.BackgroundColor3 = Color3.fromRGB(25,40,30)
+        button.TextColor3 = Color3.fromRGB(0,255,150)
+        button.Text = "⚔️ "..tool.Name
+        button.Font = Enum.Font.GothamSemibold
+        button.TextSize = 10
+        button.Parent = auraToolList
+        Instance.new("UICorner",button).CornerRadius = UDim.new(0,5)
+
+        button.MouseButton1Click:Connect(function()
+            Config.SelectedTool = tool
+            Config.ToolHasDamage = hasDamage
+            auraStatus.TextColor3 = Color3.fromRGB(0,255,150)
+            auraStatus.Text = "⚔️ อาวุธ: "..tool.Name.." | พร้อมโจมตี"
+        end)
+    end
+end
+
+auraScan.MouseButton1Click:Connect(RefreshAuraTools)
+
+MakeToggle(pageAura,"⚔️ Proximity Strike (เข้าใกล้แล้วโจมตี)",function(v)
+    Config.ProximityStrikeEnabled = v
+    if v and not Config.SelectedTool then
+        auraStatus.TextColor3 = Color3.fromRGB(255,180,0)
+        auraStatus.Text = "⚠️ เปิดแล้ว แต่ยังไม่ได้เลือก Tool"
+    end
+end)
+
+MakeSlider(pageAura,"ระยะโจมตี (Range)",5,50,15,function(v)
+    Config.ProximityRange = v
+end)
+
+MakeSlider(pageAura,"คูลดาวน์การสั่งตี",1,20,4,function(v)
+    Config.ProximityCooldown = v / 10
+end)
+
+local function GetNearestTargetInRange(myCharacter,range)
+    local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+
+    local nearest,nearestDistance = nil,range
+    for _,model in ipairs(Workspace:GetDescendants()) do
+        if model:IsA("Model") and model ~= myCharacter then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
+            if hum and root and hum.Health > 0 then
+                local targetPlayer = Players:GetPlayerFromCharacter(model)
+                if targetPlayer ~= LocalPlayer then
+                    local distance = (myRoot.Position - root.Position).Magnitude
+                    if distance <= nearestDistance then
+                        nearest = model
+                        nearestDistance = distance
+                    end
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+TrackConnection(RunService.Heartbeat:Connect(function()
+    pcall(function()
+        if not Config.ProximityStrikeEnabled or not Config.SelectedTool or not Config.ToolHasDamage then return end
+
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum then return end
+
+        local target = GetNearestTargetInRange(char,Config.ProximityRange)
+        if not target then return end
+
+        if tick() - Config.LastProximityAttack < Config.ProximityCooldown then return end
+        Config.LastProximityAttack = tick()
+
+        -- Equip through Humanoid instead of moving the Tool's Parent manually.
+        if Config.SelectedTool.Parent ~= char then
+            hum:EquipTool(Config.SelectedTool)
+        end
+
+        -- This triggers the Tool's normal client activation.
+        -- Actual damage is still controlled by the game's server-side weapon logic.
+        pcall(function()
+            Config.SelectedTool:Activate()
+        end)
+    end)
+end)
+
 
 MakeToggle(pageESP,"👁 Enable ESP (Highlight)",function(v) Config.ESPEnabled=v end)
 MakeToggle(pageESP,"🛡 ESP Team Check",function(v) Config.ESPTeamCheck=v end)
