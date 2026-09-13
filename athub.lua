@@ -14,9 +14,6 @@ local player = Players.LocalPlayer
 local safeKey = "AT_UltimateHub_v33"
 local isRunning = true
 
--- ==========================================
--- 🧹 GLOBAL CLEANUP SYSTEM (ป้องกันการเปิดซ้อน)
--- ==========================================
 if _G.ATHub_Unload then pcall(_G.ATHub_Unload) end
 
 local Connections = {}
@@ -25,9 +22,6 @@ local function TrackConnection(conn)
     return conn
 end
 
--- ==========================================
--- ⚙️ CONFIG & STATE MANAGEMENT
--- ==========================================
 local Config = {
     AimbotOn = false, AimFOV = 180, LockPower = 90, TargetPart = "Head",
     TargetMode = "Players", TeamCheck = false, WallCheck = false,
@@ -53,7 +47,7 @@ local State = {
     RayParams = RaycastParams.new()
 }
 
-State.RayParams.FilterType = RaycastFilterType.Exclude
+State.RayParams.FilterType = RaycastParams.FilterType.Exclude
 
 local function GetHRP(char)
     if not char then return nil end
@@ -97,9 +91,6 @@ local function IsVisible(targetPart, myChar)
     return result == nil or result.Instance:IsDescendantOf(targetPart.Parent)
 end
 
--- ==========================================
--- 🎨 UI CREATION
--- ==========================================
 local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
 local guiParent = playerGui
 pcall(function()
@@ -706,14 +697,18 @@ TrackConnection(RunService.RenderStepped:Connect(function()
                     local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
                         local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                        if dist < sDist then sDist, bestPart = dist, part end
+                        if dist < sDist then
+                            sDist = dist
+                            bestPart = part
+                        end
                     end
                 end
             end
         end
         if bestPart then
             local curCF = Camera.CFrame
-            Camera.CFrame = curCF:Lerp(CFrame.new(curCF.Position, bestPart.Position), math.clamp(Config.LockPower / 100, 0.05, 1))
+            local tCF = CFrame.new(curCF.Position, bestPart.Position)
+            Camera.CFrame = curCF:Lerp(tCF, math.clamp(Config.LockPower / 100, 0.05, 1))
         end
     end
 end))
