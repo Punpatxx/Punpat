@@ -52,7 +52,7 @@ local State = {
     RayParams = RaycastParams.new()
 }
 
-State.RayParams.FilterType = RaycastFilterType.Exclude
+State.RayParams.FilterType = RaycastParams.FilterType.Exclude
 
 -- ==========================================
 -- 🛡️ UTILITY FUNCTIONS
