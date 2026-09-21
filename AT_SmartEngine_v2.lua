@@ -1,6 +1,6 @@
 -- ==========================================
--- ⚡ AT Hub - Smart Teleport & Auto Farm Engine v2.1
--- 👑 Ultimate Cyber Edition (Custom Distance & Stunning UI)
+-- ⚡ AT Hub - Smart Teleport & Auto Farm Engine v2.2
+-- 👑 Persistent Respawn Edition (Auto-Recovery & Background Farm)
 -- 👨‍💻 Developer: NATTHANON WHAIPILP
 -- ==========================================
 
@@ -10,7 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = workspace
 local player = Players.LocalPlayer
 
-local safeKey = "AT_SmartEngine_v21"
+local safeKey = "AT_SmartEngine_v22"
 local isRunning = true
 
 if _G.AT_SmartUnload then pcall(_G.AT_SmartUnload) end
@@ -21,27 +21,26 @@ local function TrackConnection(conn)
     return conn
 end
 
+-- ==========================================
+-- ⚙️ CONFIG & STATE STORAGE
+-- ==========================================
 local Config = {
     ActiveMode = "None",
     TargetPlayer = nil,
     PlayerDir = "Above",
     PlayerDist = 5,
     PlayerSpeed = 50,
-
     MobScanRange = 50,
     MobSpeed = 50,
     MobDir = "Above",
     MobDist = 5,
     StickyAutoMobInstance = nil,
     StickyAutoMobName = nil,
-
     SelectedMobInstance = nil,
     SelectedMobName = nil,
-
     AutoAttackOn = false,
     SelectedTool = nil,
     AttackCooldown = 0.25,
-
     SpeedOn = false, SpeedVal = 16,
     JumpOn = false, JumpVal = 50,
     NoClipOn = false
@@ -104,8 +103,10 @@ local function GetTargetCFrame(targetHrp, dir, dist)
     return CFrame.new(computedPos, targetPos)
 end
 
+-- ==========================================
+-- 🎨 UI SYSTEM (Cyber Theme & Modern UI)
+-- ==========================================
 local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
-
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = safeKey
 ScreenGui.ResetOnSpawn = false
@@ -151,7 +152,7 @@ TopStatus.Size = UDim2.new(1, -15, 1, 0)
 TopStatus.Position = UDim2.new(0, 15, 0, 0)
 TopStatus.BackgroundTransparency = 1
 TopStatus.TextColor3 = Color3.fromRGB(0, 255, 150)
-TopStatus.Text = "⚡ AT SMART ENGINE v2.1 [ULTIMATE]"
+TopStatus.Text = "⚡ AT SMART ENGINE v2.2 [RESPAWN SAFE]"
 TopStatus.Font = Enum.Font.GothamBold
 TopStatus.TextSize = 11
 TopStatus.TextXAlignment = Enum.TextXAlignment.Left
@@ -268,21 +269,14 @@ local function MakeSlider(parentPage, text, min, max, default, callback)
     end
 
     sliderBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDrag = true
-            update(input)
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDrag = true; update(input) end
     end)
-    TrackConnection(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDrag = false
-        end
-    end))
-    TrackConnection(UserInputService.InputChanged:Connect(function(input)
-        if isDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            update(input)
-        end
-    end))
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDrag = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end
+    end)
 end
 
 local playerToggleBtn = Instance.new("TextButton")
@@ -316,13 +310,10 @@ playerToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-MakeSlider(pagePlayer, "ระยะห่างจากผู้เล่น (Studs)", 1, 20, 5, function(v)
-    Config.PlayerDist = v
-end)
+MakeSlider(pagePlayer, "ระยะห่างจากผู้เล่น (Studs)", 1, 20, 5, function(v) Config.PlayerDist = v end)
 
 local pDirs = {"Above", "Below", "Front", "Back", "Left", "Right"}
 local pDirNames = {"เหนือหัว", "ใต้เท้า", "ด้านหน้า", "ด้านหลัง", "ด้านซ้าย", "ด้านขวา"}
-
 for i, dir in ipairs(pDirs) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0.95, 0, 0, 24)
@@ -333,7 +324,6 @@ for i, dir in ipairs(pDirs) do
     b.TextSize = 10
     b.Parent = pagePlayer
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-
     b.MouseButton1Click:Connect(function()
         Config.PlayerDir = dir
         playerInfoLabel.Text = "📌 ทิศ: " .. pDirNames[i] .. " | ระยะ: " .. tostring(Config.PlayerDist)
@@ -358,10 +348,7 @@ playerListFrame.Parent = pagePlayer
 Instance.new("UIListLayout", playerListFrame).Padding = UDim.new(0, 2)
 
 refreshPlrBtn.MouseButton1Click:Connect(function()
-    for _, c in pairs(playerListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
-
+    for _, c in pairs(playerListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
             local btn = Instance.new("TextButton")
@@ -373,7 +360,6 @@ refreshPlrBtn.MouseButton1Click:Connect(function()
             btn.TextSize = 10
             btn.Parent = playerListFrame
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
             btn.MouseButton1Click:Connect(function()
                 Config.TargetPlayer = p
                 Config.ActiveMode = "Player"
@@ -418,9 +404,7 @@ autoMobToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-MakeSlider(pageMob, "ระยะห่างจากมอน (Studs)", 1, 20, 5, function(v)
-    Config.MobDist = v
-end)
+MakeSlider(pageMob, "ระยะห่างจากมอน (Studs)", 1, 20, 5, function(v) Config.MobDist = v end)
 
 for i, dir in ipairs(pDirs) do
     local b = Instance.new("TextButton")
@@ -432,20 +416,14 @@ for i, dir in ipairs(pDirs) do
     b.TextSize = 10
     b.Parent = pageMob
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-
     b.MouseButton1Click:Connect(function()
         Config.MobDir = dir
         mobStatusLabel.Text = "👾 ทิศเกาะมอน: " .. pDirNames[i]
     end)
 end
 
-MakeSlider(pageMob, "ระยะสแกนหามอน", 10, 200, 50, function(v)
-    Config.MobScanRange = v
-end)
-
-MakeSlider(pageMob, "ความเร็วบินหามอน", 10, 200, 50, function(v)
-    Config.MobSpeed = v
-end)
+MakeSlider(pageMob, "ระยะสแกนหามอน", 10, 200, 50, function(v) Config.MobScanRange = v end)
+MakeSlider(pageMob, "ความเร็วบินหามอน", 10, 200, 50, function(v) Config.MobSpeed = v end)
 
 local resetMobBtn = Instance.new("TextButton")
 resetMobBtn.Size = UDim2.new(0.95, 0, 0, 28)
@@ -512,32 +490,21 @@ specMobListFrame.Parent = pageSpecificMob
 Instance.new("UIListLayout", specMobListFrame).Padding = UDim.new(0, 2)
 
 scanSpecMobBtn.MouseButton1Click:Connect(function()
-    for _, c in pairs(specMobListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
-
+    for _, c in pairs(specMobListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     local char = player.Character
     local hrp = GetHRP(char)
     if not hrp then return end
 
     local foundMobs = {}
-
     for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("Model") and v ~= char and IsAlive(v) then
             if not Players:GetPlayerFromCharacter(v) then
                 local mHrp = GetHRP(v)
                 if mHrp and (hrp.Position - mHrp.Position).Magnitude <= 150 then
                     local exists = false
-                    for _, name in ipairs(foundMobs) do
-                        if name == v.Name then
-                            exists = true
-                            break
-                        end
-                    end
-
+                    for _, name in ipairs(foundMobs) do if name == v.Name then exists = true break end end
                     if not exists then
                         table.insert(foundMobs, v.Name)
-
                         local btn = Instance.new("TextButton")
                         btn.Size = UDim2.new(1, 0, 0, 24)
                         btn.BackgroundColor3 = Color3.fromRGB(28, 28, 42)
@@ -547,7 +514,6 @@ scanSpecMobBtn.MouseButton1Click:Connect(function()
                         btn.TextSize = 10
                         btn.Parent = specMobListFrame
                         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
                         btn.MouseButton1Click:Connect(function()
                             Config.SelectedMobName = v.Name
                             Config.SelectedMobInstance = v
@@ -563,9 +529,7 @@ scanSpecMobBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-MakeSlider(pageTool, "ความเร็วตี (ms x 10)", 1, 10, 2, function(v)
-    Config.AttackCooldown = v / 10
-end)
+MakeSlider(pageTool, "ความเร็วตี (ms x 10)", 1, 10, 2, function(v) Config.AttackCooldown = v / 10 end)
 
 local toolStatusLabel = Instance.new("TextLabel")
 toolStatusLabel.Size = UDim2.new(0.95, 0, 0, 22)
@@ -610,25 +574,14 @@ toolListFrame.Parent = pageTool
 Instance.new("UIListLayout", toolListFrame).Padding = UDim.new(0, 2)
 
 scanToolBtn.MouseButton1Click:Connect(function()
-    for _, c in pairs(toolListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
-
+    for _, c in pairs(toolListFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     local foundTools = {}
-    local bp = player:FindFirstChild("Backpack")
-    local char = player.Character
-
-    local function AddTools(container)
-        if not container then return end
-        for _, v in ipairs(container:GetChildren()) do
-            if v:IsA("Tool") then
-                table.insert(foundTools, v)
-            end
-        end
+    local bp, char = player:FindFirstChild("Backpack"), player.Character
+    local function AddTools(p)
+        if not p then return end
+        for _, v in ipairs(p:GetChildren()) do if v:IsA("Tool") then table.insert(foundTools, v) end end
     end
-
-    AddTools(bp)
-    AddTools(char)
+    AddTools(bp) AddTools(char)
 
     for _, tool in ipairs(foundTools) do
         local btn = Instance.new("TextButton")
@@ -640,7 +593,6 @@ scanToolBtn.MouseButton1Click:Connect(function()
         btn.TextSize = 10
         btn.Parent = toolListFrame
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
         btn.MouseButton1Click:Connect(function()
             Config.SelectedTool = tool
             toolStatusLabel.Text = "✔️ ใช้งาน: " .. tool.Name
@@ -657,17 +609,13 @@ speedToggleBtn.Font = Enum.Font.GothamBold
 speedToggleBtn.TextSize = 10
 speedToggleBtn.Parent = pageMove
 Instance.new("UICorner", speedToggleBtn).CornerRadius = UDim.new(0, 8)
-
 speedToggleBtn.MouseButton1Click:Connect(function()
     Config.SpeedOn = not Config.SpeedOn
     speedToggleBtn.BackgroundColor3 = Config.SpeedOn and Color3.fromRGB(0, 140, 255) or Color3.fromRGB(24, 24, 36)
     speedToggleBtn.Text = Config.SpeedOn and "[ON] วิ่งเร็ว" or "[OFF] วิ่งเร็ว"
     if not Config.SpeedOn then RestoreStats() end
 end)
-
-MakeSlider(pageMove, "ความเร็วเดิน", 16, 300, 16, function(v)
-    Config.SpeedVal = v
-end)
+MakeSlider(pageMove, "ความเร็วเดิน", 16, 300, 16, function(v) Config.SpeedVal = v end)
 
 local jumpToggleBtn = Instance.new("TextButton")
 jumpToggleBtn.Size = UDim2.new(0.95, 0, 0, 32)
@@ -678,17 +626,13 @@ jumpToggleBtn.Font = Enum.Font.GothamBold
 jumpToggleBtn.TextSize = 10
 jumpToggleBtn.Parent = pageMove
 Instance.new("UICorner", jumpToggleBtn).CornerRadius = UDim.new(0, 8)
-
 jumpToggleBtn.MouseButton1Click:Connect(function()
     Config.JumpOn = not Config.JumpOn
     jumpToggleBtn.BackgroundColor3 = Config.JumpOn and Color3.fromRGB(0, 140, 255) or Color3.fromRGB(24, 24, 36)
     jumpToggleBtn.Text = Config.JumpOn and "[ON] กระโดดสูง" or "[OFF] กระโดดสูง"
     if not Config.JumpOn then RestoreStats() end
 end)
-
-MakeSlider(pageMove, "พลังกระโดด", 50, 300, 50, function(v)
-    Config.JumpVal = v
-end)
+MakeSlider(pageMove, "พลังกระโดด", 50, 300, 50, function(v) Config.JumpVal = v end)
 
 local noclipToggleBtn = Instance.new("TextButton")
 noclipToggleBtn.Size = UDim2.new(0.95, 0, 0, 32)
@@ -699,13 +643,46 @@ noclipToggleBtn.Font = Enum.Font.GothamBold
 noclipToggleBtn.TextSize = 10
 noclipToggleBtn.Parent = pageMove
 Instance.new("UICorner", noclipToggleBtn).CornerRadius = UDim.new(0, 8)
-
 noclipToggleBtn.MouseButton1Click:Connect(function()
     Config.NoClipOn = not Config.NoClipOn
     noclipToggleBtn.BackgroundColor3 = Config.NoClipOn and Color3.fromRGB(0, 140, 255) or Color3.fromRGB(24, 24, 36)
     noclipToggleBtn.Text = Config.NoClipOn and "[ON] ทะลุกำแพง (NoClip)" or "[OFF] ทะลุกำแพง (NoClip)"
 end)
 
+-- ==========================================
+-- 🔄 RESPAWN RECOVERY LISTENER (ระบบเกิดใหม่แล้วลุยต่อ)
+-- ==========================================
+TrackConnection(player.CharacterAdded:Connect(function(newChar)
+    if not isRunning then return end
+    task.wait(0.8)
+    pcall(function()
+        local hum = newChar:WaitForChild("Humanoid", 5)
+        if hum then
+            if Config.AutoAttackOn and Config.SelectedTool then
+                local toolName = Config.SelectedTool.Name
+                local backpack = player:FindFirstChild("Backpack")
+                local targetTool = nil
+
+                if backpack then
+                    targetTool = backpack:FindFirstChild(toolName)
+                end
+
+                if not targetTool then
+                    targetTool = player.Character:FindFirstChild(toolName)
+                end
+
+                if targetTool then
+                    Config.SelectedTool = targetTool
+                    hum:EquipTool(targetTool)
+                end
+            end
+        end
+    end)
+end))
+
+-- ==========================================
+-- ⚙️ BACKGROUND EXECUTION LOOPS (Masterpiece Core)
+-- ==========================================
 TrackConnection(RunService.Stepped:Connect(function()
     if not isRunning then return end
     pcall(function()
@@ -713,9 +690,7 @@ TrackConnection(RunService.Stepped:Connect(function()
             local char = player.Character
             if char then
                 for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then
-                        part.CanCollide = false
-                    end
+                    if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
                 end
             end
         end
@@ -724,76 +699,53 @@ end))
 
 TrackConnection(RunService.Heartbeat:Connect(function()
     if not isRunning then return end
-
     pcall(function()
         local char = player.Character
         if not char then return end
-
         local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = GetHRP(char)
-        if not hrp then return end
+        if not hrp or not IsAlive(char) then return end
 
         if hum then
-            if Config.SpeedOn then
-                hum.WalkSpeed = Config.SpeedVal
-            end
-
+            if Config.SpeedOn then hum.WalkSpeed = Config.SpeedVal end
             if Config.JumpOn then
-                if hum.UseJumpPower then
-                    hum.JumpPower = Config.JumpVal
-                else
-                    hum.JumpHeight = Config.JumpVal
-                end
+                if hum.UseJumpPower then hum.JumpPower = Config.JumpVal else hum.JumpHeight = Config.JumpVal end
             end
         end
 
+        -- Player
         if Config.ActiveMode == "Player" and Config.TargetPlayer then
             local tChar = Config.TargetPlayer.Character
             if IsAlive(tChar) then
                 local tHrp = GetHRP(tChar)
                 if tHrp then
                     local targetCF = GetTargetCFrame(tHrp, Config.PlayerDir, Config.PlayerDist)
-                    if targetCF then
-                        hrp.CFrame = hrp.CFrame:Lerp(
-                            targetCF,
-                            math.clamp(Config.PlayerSpeed / 100, 0.05, 0.8)
-                        )
-                    end
+                    if targetCF then hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(Config.PlayerSpeed / 100, 0.05, 0.8)) end
                 end
             end
         end
 
+        -- Auto Nearby Mob
         if Config.ActiveMode == "AutoMob" then
             local validTarget = false
-
             if Config.StickyAutoMobInstance and IsAlive(Config.StickyAutoMobInstance) then
                 local mHrp = GetHRP(Config.StickyAutoMobInstance)
-
                 if mHrp and (hrp.Position - mHrp.Position).Magnitude <= Config.MobScanRange * 3 then
                     validTarget = true
-
                     local targetCF = GetTargetCFrame(mHrp, Config.MobDir, Config.MobDist)
-                    if targetCF then
-                        hrp.CFrame = hrp.CFrame:Lerp(
-                            targetCF,
-                            math.clamp(Config.MobSpeed / 100, 0.05, 0.8)
-                        )
-                    end
+                    if targetCF then hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(Config.MobSpeed / 100, 0.05, 0.8)) end
                 end
             end
 
             if not validTarget then
                 local nearestDist = Config.MobScanRange
                 local nearestModel = nil
-
                 for _, v in ipairs(Workspace:GetDescendants()) do
                     if v:IsA("Model") and v ~= char and IsAlive(v) then
                         if not Players:GetPlayerFromCharacter(v) then
                             local mHrp = GetHRP(v)
-
                             if mHrp then
                                 local dist = (hrp.Position - mHrp.Position).Magnitude
-
                                 if Config.StickyAutoMobName == v.Name or not Config.StickyAutoMobName then
                                     if dist <= nearestDist then
                                         nearestDist = dist
@@ -815,32 +767,23 @@ TrackConnection(RunService.Heartbeat:Connect(function()
             end
         end
 
+        -- Specific Selected Mob + Respawn Recovery
         if Config.ActiveMode == "SpecificMob" then
             local validSpecTarget = false
 
             if Config.SelectedMobInstance and IsAlive(Config.SelectedMobInstance) then
                 local mHrp = GetHRP(Config.SelectedMobInstance)
-
                 if mHrp then
                     validSpecTarget = true
-
                     local targetCF = GetTargetCFrame(mHrp, Config.MobDir, Config.MobDist)
-                    if targetCF then
-                        hrp.CFrame = hrp.CFrame:Lerp(
-                            targetCF,
-                            math.clamp(Config.MobSpeed / 100, 0.05, 0.8)
-                        )
-                    end
+                    if targetCF then hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(Config.MobSpeed / 100, 0.05, 0.8)) end
                 end
             end
 
             if not validSpecTarget and Config.SelectedMobName then
-                Config.SelectedMobInstance = nil
-
                 for _, v in ipairs(Workspace:GetDescendants()) do
                     if v:IsA("Model") and v.Name == Config.SelectedMobName and IsAlive(v) then
                         local mHrp = GetHRP(v)
-
                         if mHrp then
                             Config.SelectedMobInstance = v
                             specMobStatusLabel.Text = "🎯 มอนเกิดแล้ว: " .. v.Name
@@ -849,56 +792,44 @@ TrackConnection(RunService.Heartbeat:Connect(function()
                     end
                 end
 
-                if not Config.SelectedMobInstance then
+                if not Config.SelectedMobInstance or not IsAlive(Config.SelectedMobInstance) then
                     specMobStatusLabel.Text = "🎯 มอนตาย... รอมอนตัวเดิมเกิด..."
                 end
             end
         end
 
+        -- Smart Background Tool Execution
         if Config.AutoAttackOn and Config.SelectedTool then
             local tool = Config.SelectedTool
-
             if tool and tool.Parent then
                 if tool.Parent ~= char then
                     local backpack = player:FindFirstChild("Backpack")
-
                     if backpack and tool.Parent == backpack then
-                        if hum then
-                            pcall(function()
-                                hum:EquipTool(tool)
-                            end)
-                        end
+                        if hum then pcall(function() hum:EquipTool(tool) end) end
+                    else
+                        pcall(function() tool.Parent = char end)
                     end
                 end
 
                 if tick() - State.LastAttackTick >= Config.AttackCooldown then
                     State.LastAttackTick = tick()
-                    pcall(function()
-                        tool:Activate()
-                    end)
+                    pcall(function() tool:Activate() end)
                 end
             end
         end
     end)
 end))
 
+-- ==========================================
+-- 🛑 UNLOAD SYSTEM
+-- ==========================================
 _G.AT_SmartUnload = function()
     isRunning = false
-
     for _, conn in ipairs(Connections) do
-        if conn and conn.Disconnect then
-            pcall(function()
-                conn:Disconnect()
-            end)
-        end
+        if conn and conn.Disconnect then pcall(function() conn:Disconnect() end) end
     end
-
     Connections = {}
     RestoreStats()
-
-    if ScreenGui then
-        ScreenGui:Destroy()
-    end
-
+    if ScreenGui then ScreenGui:Destroy() end
     _G.AT_SmartUnload = nil
 end
