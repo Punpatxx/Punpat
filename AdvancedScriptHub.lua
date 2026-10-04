@@ -84,7 +84,7 @@ NotifContainer.BackgroundTransparency = 1
 NotifContainer.Parent = ScreenGui
 
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.SortOrder = Enum.SortOrder.LayoutIndex
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 8)
 UIListLayout.Parent = NotifContainer
 
@@ -245,7 +245,7 @@ TabCorner.Parent = TabBar
 
 local TabListLayout = Instance.new("UIListLayout")
 TabListLayout.FillDirection = Enum.FillDirection.Horizontal
-TabListLayout.SortOrder = Enum.SortOrder.LayoutIndex
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 TabListLayout.Parent = TabBar
 
 local ContentContainer = Instance.new("Frame")
@@ -268,7 +268,7 @@ local function createTabContent(name: string): ScrollingFrame
     scroll.Parent = ContentContainer
 
     local layout = Instance.new("UIListLayout")
-    layout.SortOrder = Enum.SortOrder.LayoutIndex
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 8)
     layout.Parent = scroll
 
@@ -558,7 +558,7 @@ wpListContainer.BackgroundTransparency = 1
 wpListContainer.Parent = tabWaypoints
 
 local wpLayout = Instance.new("UIListLayout")
-wpLayout.SortOrder = Enum.SortOrder.LayoutIndex
+wpLayout.SortOrder = Enum.SortOrder.LayoutOrder
 wpLayout.Padding = UDim.new(0, 5)
 wpLayout.Parent = wpListContainer
 
