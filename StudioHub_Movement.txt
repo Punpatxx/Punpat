@@ -1,0 +1,42 @@
+-- StudioHub_Movement.lua
+-- Safe Roblox Studio movement/debug module.
+-- Intended for a game you own.
+
+local Players = game:GetService("Players")
+
+local Module = {}
+
+function Module.SetWalkSpeed(player, speed)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = math.clamp(speed, 0, 200)
+        return true
+    end
+    return false
+end
+
+function Module.SetJumpPower(player, power)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = math.clamp(power, 0, 300)
+        return true
+    end
+    return false
+end
+
+function Module.ResetMovement(player)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 16
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = 50
+        return true
+    end
+    return false
+end
+
+return Module
