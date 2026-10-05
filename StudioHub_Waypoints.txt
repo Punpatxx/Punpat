@@ -1,0 +1,54 @@
+-- StudioHub_Waypoints.lua
+-- Safe waypoint/debug module for a Roblox game you own.
+
+local Module = {}
+
+local MAX_WAYPOINTS = 5
+local waypoints = {}
+
+function Module.Mark(name, cframe)
+    if typeof(cframe) ~= "CFrame" then
+        return false, "Invalid CFrame"
+    end
+
+    if #waypoints >= MAX_WAYPOINTS then
+        return false, "Waypoint limit reached"
+    end
+
+    name = tostring(name or ("Waypoint " .. (#waypoints + 1)))
+    table.insert(waypoints, {
+        Name = name,
+        CFrame = cframe
+    })
+
+    return true
+end
+
+function Module.GetAll()
+    return waypoints
+end
+
+function Module.Get(name)
+    for _, waypoint in ipairs(waypoints) do
+        if waypoint.Name == name then
+            return waypoint
+        end
+    end
+    return nil
+end
+
+function Module.Remove(name)
+    for i, waypoint in ipairs(waypoints) do
+        if waypoint.Name == name then
+            table.remove(waypoints, i)
+            return true
+        end
+    end
+    return false
+end
+
+function Module.Clear()
+    table.clear(waypoints)
+end
+
+return Module
