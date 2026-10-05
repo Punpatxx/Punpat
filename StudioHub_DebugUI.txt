@@ -1,0 +1,70 @@
+-- StudioHub_DebugUI.lua
+-- Safe client debug UI starter for Roblox Studio.
+-- Place as a LocalScript in StarterPlayerScripts for a game you own.
+
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local old = playerGui:FindFirstChild("StudioDebugHub")
+if old then
+    old:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "StudioDebugHub"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Name = "Main"
+frame.Size = UDim2.fromOffset(300, 180)
+frame.Position = UDim2.new(0, 20, 0.5, -90)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.fromOffset(10, 8)
+title.BackgroundTransparency = 1
+title.Text = "Studio Debug Hub"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 20
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -20, 0, 70)
+status.Position = UDim2.fromOffset(10, 55)
+status.BackgroundTransparency = 1
+status.Text = "Ready\n" .. player.Name
+status.TextColor3 = Color3.fromRGB(200, 200, 205)
+status.TextSize = 15
+status.Font = Enum.Font.Gotham
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Parent = frame
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(80, 34)
+close.Position = UDim2.new(1, -90, 1, -44)
+close.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+close.Text = "Close"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.TextSize = 14
+close.Font = Enum.Font.GothamMedium
+close.Parent = frame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = close
+
+close.MouseButton1Click:Connect(function()
+    gui:Destroy()
+end)
